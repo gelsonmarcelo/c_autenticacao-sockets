@@ -23,18 +23,19 @@ void pare(){
 }
 
 int main(void){
-    //Declaração das variáveis
-    int socket_descritor, conexao, socket_size;
-    struct sockaddr_in servidor, cliente;
-    char *msg_servidor;
-    char msg_cliente[MAX_MSG];
-    int tamanho, count;
+    int socket_descritor; //Descritor do socket
+    int conexao; //Guarda o retorno de accept, um arquivo descritor do socket conectado
+    int socket_size; //Guarda o tamanho da estrutura do socket
+    struct sockaddr_in servidor, cliente; //Estruturas de cliente e servidor, para guardar seus dados
+    char *msg_servidor; //Guarda a mensagem que será enviada pelo servidor
+    char msg_cliente[MAX_MSG]; //Guarda a mensagem recebida do cliente
+    int tamanho; //Guarda o tamanho da mensagem recebida pelo cliente
+    // int count; 
 
-    // para pegar o IP e porta do cliente
-    char *cliente_ip;
-    int cliente_port;
+    char *cliente_ip; //Para pegar o IP do cliente
+    int cliente_port; //Para pegar porta do cliente
 
-    /*********************************************************/
+    /******* CONFIGURAÇÃO DO SOCKET E CONEXÃO *******/
     //Cria um socket
     socket_descritor = socket(AF_INET, SOCK_STREAM, 0);
     if (socket_descritor == -1){
@@ -47,7 +48,7 @@ int main(void){
     servidor.sin_addr.s_addr = INADDR_ANY; // Obtem IP do Sistema Operacional
     servidor.sin_port = htons(3344);
 
-    //Associa o socket a porta e endereco
+    //Associa o socket à porta e endereço
     if (bind(socket_descritor, (struct sockaddr *)&servidor, sizeof(servidor)) < 0){
         perror("Erro ao fazer bind\n");
         return -1;
@@ -55,10 +56,10 @@ int main(void){
     puts("Bind efetuado com sucesso\n");
     pare();
 
-    // Ouve por conexoes
+    //Ouve por conexões
     listen(socket_descritor, 3);
 
-    //Aceita e trata conexoes
+    //Aceita e trata conexões
     puts("Aguardando por conexoes...");
     socket_size = sizeof(struct sockaddr_in);
     conexao = accept(socket_descritor, (struct sockaddr *)&cliente, (socklen_t *)&socket_size);
@@ -67,22 +68,21 @@ int main(void){
         return -1;
     }
 
-    /*********comunicao entre cliente/servidor****************/
-
-    // obtem IP e porta do cliente
+	/******* COMINUCAÇÃO ENTRE CLIENTE/SERVIDOR *******/
+    //Obtém IP e porta do cliente
     cliente_ip = inet_ntoa(cliente.sin_addr);
     cliente_port = ntohs(cliente.sin_port);
-    printf("cliente conectou\nIP:PORTA -> %s:%d\n", cliente_ip, cliente_port);
+    printf("Cliente conectou\nIP:PORTA -> %s:%d\n", cliente_ip, cliente_port);
     pare();
 
-    // le dados enviados pelo cliente
+    //Lê dados enviados pelo cliente
     if ((tamanho = read(conexao, msg_cliente, MAX_MSG)) < 0){
         perror("Erro ao receber dados do cliente: ");
         return -1;
     }
     puts("Leu o socket que o cliente escreveu");
     
-    // Coloca terminador de string
+    //Adiciona terminador de string
     msg_cliente[tamanho] = '\0';
     
     if(!strcmp(msg_cliente, "senha123")){
@@ -95,14 +95,14 @@ int main(void){
 
     pare();
 
-    // Envia resposta para o cliente
+    //Envia resposta para o cliente
     puts("Enviei resposta para o cliente");
     write(conexao, msg_servidor, strlen(msg_servidor));
     pare();
-    /*********************************************************/
 
+	/******* FINALIZA CONEXÃO *******/
     shutdown(socket_descritor, 2);
-    // shutdown(socket_descritor, SHUT_RDWR);
+    //shutdown(socket_descritor, SHUT_RDWR);
     close(socket_descritor);    
 
     printf("Servidor finalizado.\n");
