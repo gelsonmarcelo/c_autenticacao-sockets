@@ -15,19 +15,20 @@
 	recebida do Servidor
 */
 
-void pare(){
-    setbuf(stdin, NULL);
-    getchar();
-    setbuf(stdin, NULL);
+void pare()
+{
+	setbuf(stdin, NULL);
+	getchar();
+	setbuf(stdin, NULL);
 }
 
 int main(int argc, char *argv[])
 {
-	int socket_descritor; //Variável que guarda o descritor do socket
+	int socket_descritor;		 //Variável que guarda o descritor do socket
 	struct sockaddr_in servidor; //Estrutura que guarda dados do servidor que irá se conectar
-	char *msg_cliente; //String com mensagem enviada do cliente
-	char msg_servidor[MAX_MSG]; //Mensagem que será recebida, vinda do servidor
-	int tamanho; //Mantém o tamanho da mensagem recebida, vinda do servidor
+	char *msg_cliente;			 //String com mensagem enviada do cliente
+	char msg_servidor[MAX_MSG];	 //Mensagem que será recebida, vinda do servidor
+	int tamanho;				 //Mantém o tamanho da mensagem recebida, vinda do servidor
 
 	/******* CONFIGURAÇÃO DO SOCKET E CONEXÃO *******/
 	//Cria um socket
@@ -36,16 +37,16 @@ int main(int argc, char *argv[])
 
 	//Atribuindo informações das configurações do servidor, na sua estrutura
 	servidor.sin_addr.s_addr = inet_addr("127.0.0.1"); //Endereço IP
-	servidor.sin_family = AF_INET; //Para comunicação IPV4
-	servidor.sin_port = htons(3344); //Porta de conexão do servidor
+	servidor.sin_family = AF_INET;					   //Para comunicação IPV4
+	servidor.sin_port = htons(3345);				   //Porta de conexão do servidor
 
 	//Conecta no servidor
-	if (connect(socket_descritor, (struct sockaddr *)&servidor, sizeof(servidor)) < 0){
+	if (connect(socket_descritor, (struct sockaddr *)&servidor, sizeof(servidor)) < 0)
+	{
 		printf("Nao foi possivel conectar\n");
 		return -1;
 	}
 	printf("Conectado no servidor\n");
-	pare();
 
 	/******* COMUNICACAO - TROCA DE MENSAGENS *******/
 	// Protocolo dessa aplicacao
@@ -53,29 +54,34 @@ int main(int argc, char *argv[])
 	// 2 - Cliente envia mensagem
 	// 3 - Servidor envia resposta
 
-	//Escreve/envia mensagem no socket
-	puts("\nDigite a senha para o servidor: ");
-	scanf("%s", msg_cliente);
-	if (write(socket_descritor, msg_cliente, strlen(msg_cliente)) < 0){
-		printf("Erro ao enviar mensagem\n");
-		return -1;
-	}
-	puts("Dados enviados\n");
-	pare();
-
-	//Lê/recebe resposta do servidor
-	if ((tamanho = read(socket_descritor, msg_servidor, MAX_MSG)) < 0)
+	do
 	{
-		printf("Falha ao receber resposta\n");
-		return -1;
-	}
-	printf("Resposta recebida: ");
+		//Escreve/envia mensagem no socket
+		puts("\nDigite a senha para o servidor: ");
+		scanf("%s", msg_cliente);
+		if (write(socket_descritor, msg_cliente, strlen(msg_cliente)) < 0)
+		{
+			printf("Erro ao enviar mensagem\n");
+			return -1;
+		}
+		puts("Dados enviados\nAguardando resposta do servidor...");
 
-	msg_servidor[tamanho] = '\0'; //Adiciona fim de linha na string
-	puts(msg_servidor);
-	pare();
+		//Lê/recebe resposta do servidor
+		if ((tamanho = read(socket_descritor, msg_servidor, MAX_MSG)) < 0)
+		{
+			printf("Falha ao receber resposta\n");
+			return -1;
+		}
+		printf("Resposta recebida: ");
 
+		msg_servidor[tamanho] = '\0'; //Adiciona fim de linha na string
+		puts(msg_servidor);
+	} while (strcmp(msg_servidor, "Senha aprovada"));
+
+	/******* FINALIZA CONEXÃO *******/
 	close(socket_descritor); //Fecha o socket
 	printf("Cliente finalizado com sucesso!\n");
+	pare();
+	system("clear");
 	return 0;
 }

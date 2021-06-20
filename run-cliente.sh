@@ -1,3 +1,3 @@
 #!/bin/sh
-gcc -o cliente cliente.c
-./cliente
+gcc -o exe_cliente cliente.c
+./exe_cliente

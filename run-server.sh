@@ -1,3 +1,3 @@
 #!/bin/sh
-gcc -o servidor servidor.c
-./servidor
+gcc -o exe_servidor servidor.c
+./exe_servidor
