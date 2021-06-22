@@ -25,12 +25,12 @@ void pare()
 
 int main(void)
 {
-    int socket_descritor;                 //Descritor do socket
+    int socketDescritor;                 //Descritor do socket
     int conexao;                          //Guarda o retorno de accept, um arquivo descritor do socket conectado
     int socket_size;                      //Guarda o tamanho da estrutura do socket
     struct sockaddr_in servidor, cliente; //Estruturas de cliente e servidor, para guardar seus dados
     char *msg_servidor;                   //Guarda a mensagem que será enviada pelo servidor
-    char msg_cliente[MAX_MSG];            //Guarda a mensagem recebida do cliente
+    char msgCliente[MAX_MSG];            //Guarda a mensagem recebida do cliente
     int tamanho;                          //Guarda o tamanho da mensagem recebida pelo cliente
     // int count;
 
@@ -39,8 +39,8 @@ int main(void)
 
     /******* CONFIGURAÇÃO DO SOCKET E CONEXÃO *******/
     //Cria um socket
-    socket_descritor = socket(AF_INET, SOCK_STREAM, 0);
-    if (socket_descritor == -1)
+    socketDescritor = socket(AF_INET, SOCK_STREAM, 0);
+    if (socketDescritor == -1)
     {
         printf("Erro ao criar o socket\n");
         return -1;
@@ -52,7 +52,7 @@ int main(void)
     servidor.sin_port = htons(3345);
 
     //Associa o socket à porta e endereço
-    if (bind(socket_descritor, (struct sockaddr *)&servidor, sizeof(servidor)) < 0)
+    if (bind(socketDescritor, (struct sockaddr *)&servidor, sizeof(servidor)) < 0)
     {
         perror("Erro ao fazer bind\n");
         return -1;
@@ -60,12 +60,12 @@ int main(void)
     puts("Bind efetuado com sucesso\n");
 
     //Ouve por conexões
-    listen(socket_descritor, 3);
+    listen(socketDescritor, 3);
 
     //Aceita e trata conexões
     puts("Aguardando por conexoes...");
     socket_size = sizeof(struct sockaddr_in);
-    conexao = accept(socket_descritor, (struct sockaddr *)&cliente, (socklen_t *)&socket_size);
+    conexao = accept(socketDescritor, (struct sockaddr *)&cliente, (socklen_t *)&socket_size);
     if (conexao < 0)
     {
         perror("Erro ao receber conexao\n");
@@ -79,10 +79,10 @@ int main(void)
 
     do
     {
-        /******* COMINUCAÇÃO ENTRE CLIENTE/SERVIDOR *******/
+        /******* COMUNICAÇÃO ENTRE CLIENTE/SERVIDOR *******/
         puts("Aguardando resposta do cliente...");
         //Lê dados enviados pelo cliente
-        if ((tamanho = read(conexao, msg_cliente, MAX_MSG)) < 0)
+        if ((tamanho = read(conexao, msgCliente, MAX_MSG)) < 0)
         {
             perror("Erro ao receber dados do cliente: ");
             return -1;
@@ -90,16 +90,16 @@ int main(void)
         puts("Leu o socket que o cliente escreveu");
 
         //Adiciona terminador de string
-        msg_cliente[tamanho] = '\0';
+        msgCliente[tamanho] = '\0';
 
-        if (!strcmp(msg_cliente, "senha123"))
+        if (!strcmp(msgCliente, "senha123"))
         {
-            printf("Senha aprovada> O cliente enviou: %s\n", msg_cliente);
+            printf("Senha aprovada> O cliente enviou: %s\n", msgCliente);
             msg_servidor = "Senha aprovada";
         }
         else
         {
-            printf("Senha negada> O cliente enviou: %s\n", msg_cliente);
+            printf("Senha negada> O cliente enviou: %s\n", msgCliente);
             msg_servidor = "Senha negada";
         }
 
@@ -113,9 +113,9 @@ int main(void)
     } while (getchar() != 's');
 
     /******* FINALIZA CONEXÃO *******/
-    shutdown(socket_descritor, 2);
+    shutdown(socketDescritor, 2);
     //shutdown(socket_descritor, SHUT_RDWR);
-    close(socket_descritor);
+    close(socketDescritor);
 
     printf("Servidor finalizado.\n");
     pare();
