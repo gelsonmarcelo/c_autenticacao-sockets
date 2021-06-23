@@ -41,33 +41,14 @@
  * Não pode conter mais de 2 números ordenados em sequência;
  * Não pode conter mais de 2 números repetidos em sequência;
  * Não pode conter caracteres que não sejam alfanuméricos, caracteres especiais ou espaço.
-
- *      POLÍTICA DE CONTROLE DE ACESSO
-- Coordenador:
-    - Dados dos Estudantes: ver dados;
-    - Disciplina: ver descrição da disciplina; alterar descrição da disciplina; matricular estudante;
-    - Notas: ver notas; alterar notas.
-- Professor:
-    - Dados dos Estudantes: ver dados;
-    - Disciplina: ver descrição da disciplina; alterar descrição da disciplina;
-    - Notas: ver notas; alterar notas.
-- Estudante:
-    - Dados dos Estudantes: ver dados*, alterar dados*;
-    - Disciplina: ver descrição da disciplina; matricular estudante*;
-    - Notas: ver notas*
-    *Somente próprias informações
  **/
 
-FILE *ponteiroArquivos = NULL; //Ponteiro para manipular os arquivos
-char temp[MAX * 5];            //Variável temporária para gravação de valores que não serão utilizados mas precisam ser colocados em alguma variável
-
-//Strings com nomes dos arquivos utilizados
-char arquivoUsuarios[] = "dados.txt";
+FILE *ponteiroArquivos = NULL;        //Ponteiro para manipular os arquivos
+char temp[MAX * 5];                   //Variável temporária para gravação de valores que não serão utilizados mas precisam ser colocados em alguma variável
+char arquivoUsuarios[] = "dados.txt"; //String com nome dos arquivo de dados
 
 //Variáveis globais Socket
-int conexao;              //Guarda o retorno de accept, um arquivo descritor do socket conectado
-char msgCliente[MAX_MSG]; //Guarda a mensagem recebida do cliente
-char operacaoCliente[3];
+int conexao; //Guarda o retorno de accept, um arquivo descritor do socket conectado
 
 struct Usuario u; //Declaração da estrutura do usuário
 
@@ -85,11 +66,14 @@ void cadastrarUsuario();
 void gerarSalt();
 void criptografarSenha();
 void imprimirDecoracao();
-void coletarDados(short int nome, short int sobrenome, short int identificador, short int senha);
+void coletarDados();
 void atualizarLinhaArquivo(char *arquivo, char *linhaObsoleta, char *linhaAtualizada);
 void pausarPrograma();
 void finalizarPrograma();
 void fecharArquivo();
+void finalizarConexao();
+char *receberDadosCliente(char *idSincronia, char *dadoEsperado);
+void enviarDadosCliente(char *dadosServidor);
 
 /**
  * Estrutura para organização dos dados do usuário
@@ -99,48 +83,84 @@ struct Usuario
     int codigo;                            //Mantém o código (ID do arquivo de dados) do usuário
     char nome[MAX_DADOS];                  //Guarda o nome do usuário (uma palavra)
     char sobrenome[MAX_DADOS];             //Guarda o sobrenome do usuário (uma palavra)
-    char email[MAX_DADOS];                 //Guarda o e-mail do usuário
     char identificador[MAX_IDENTIFICADOR]; //Guarda o identificador/login do usuário
     char salt[SALT_SIZE + 1];              //Guarda o salt aleatório gerado
     char senha[MAX_SENHA];                 //Guarda a senha do usuário
     char *senhaCriptografada;              //Ponteiro para guardar o valor da senha criptografada, precisa ser ponteiro para receber o retorno da função crypt
-    short int papel;                       //Guarda id do papel do usuário no sistema
     char linhaUsuario[MAX];                //Essa string é utilizada para encontrar a linha do usuário no arquivo
 };
 
-char *receberDadosCliente(char *dadoEsperado)
+/**
+ * Lê dados escritos pelo cliente no socket de comunicação, separa e analisa o id de sincronização e retorna a mensagem recebida
+ * @param idSincronia é o identificador que será comparado com a mensagem recebida do cliente, para saber se a mensagem é um dado esperado
+ * @param dadosEsperado apenas um breve descritivo para que possa ser acompanhado no console do servidor, qual dado ele está aguardando
+ * @return a mensagem recebida do cliente
+ */
+char *receberDadosCliente(char *idSincronia, char *dadoEsperado)
 {
     int tamanho; //Guarda o tamanho da mensagem recebida pelo cliente
+    char *msgClienteLocal = malloc(MAX_MSG);
 
     printf("> Aguardando: %s...\n", dadoEsperado);
 
     //Lê dados enviados pelo cliente
-    if ((tamanho = read(conexao, msgCliente, MAX_MSG)) < 0)
+    if ((tamanho = read(conexao, msgClienteLocal, MAX_MSG)) < 0)
     {
-        perror("# ERRO - Erro ao receber dados do cliente:");
-        return "ERRO";
+        perror("# ERRO FATAL - Falha ao receber dados do cliente");
+        finalizarConexao();
+        finalizarPrograma();
     }
 
-    msgCliente[tamanho] = '\0'; //Adiciona terminador de string
-    return msgCliente;
+    msgClienteLocal[tamanho] = '\0'; //Adiciona NULL no final da string recebida
+
+    printf("\n§ msgCliente Recebida: %s\n", msgClienteLocal);
+
+    //Separa o identificador de sincronização e compara se era esse identificador que o programa estava esperando
+    if (strcmp(strsep(&msgClienteLocal, "/"), idSincronia))
+    {
+        //Se não for, houve algum problema na sincronização cliente/servidor e eles não estão comunicando corretamente
+        puts("\n# ERRO FATAL - Servidor e cliente não estão sincronizados...");
+        finalizarConexao();
+        finalizarPrograma();
+    }
+    //Retorna somente a parte da mensagem recebida, após o /
+    return strsep(&msgClienteLocal, "/");
 }
 
-void enviarDadosCliente(char *msg_servidor)
+/**
+ * Escreve uma mensagem no socket a ser lido pelo cliente
+ * @param dadosServidor é a string com dados que o cliente precisa enviar
+ * ### Adicionar id de sincronização
+ */
+void enviarDadosCliente(char *dadosServidor)
 {
-    if (write(conexao, msg_servidor, strlen(msg_servidor)) < 0)
+    //Escreve no socket de comunicação e valida se não houve erro
+    if (write(conexao, dadosServidor, strlen(dadosServidor)) < 0)
     {
-        printf("# ERRO - Falha ao enviar mensagem:\n\"%s\"\n", msg_servidor);
+        printf("# ERRO - Falha ao enviar mensagem:\n\"%s\"\n", dadosServidor);
+        return;
     }
-    printf("\n> Mensagem enviada para o cliente:\n\"%s\"\n", msg_servidor);
+    printf("\n§ Mensagem enviada para o cliente:\n\"%s\"\n", dadosServidor);
 }
 
-void finalizarConexaoCliente()
+/**
+ * Encerra a comunicação com o cliente atual
+ */
+void finalizarConexao()
 {
     imprimirDecoracao();
-    shutdown(conexao, SHUT_RDWR);
-    close(conexao);
-
-    puts("> Conexão com cliente encerrada");
+    if (shutdown(conexao, SHUT_RDWR))
+    {
+        perror("# ERRO - Falha ao desativar comunicação");
+        return;
+    }
+    //Fecha o socket
+    if (close(conexao))
+    {
+        perror("# ERRO - Não foi possível fechar a comunicação");
+        return;
+    }
+    puts("> SUCESSO - Conexão com cliente encerrada");
 }
 
 /**
@@ -153,7 +173,7 @@ int main()
     //Verifica arquivos necessários para o programa iniciar
     if (testarArquivo(arquivoUsuarios))
     {
-        printf("# ERRO FATAL - um arquivo de dados essencial não pode ser aberto, o programa não pode ser iniciado.\n");
+        printf("# ERRO FATAL - O arquivo de dados não pode ser manipulado, o programa não pode ser iniciado.\n");
         finalizarPrograma();
     }
 
@@ -172,8 +192,8 @@ int main()
     socketDescritor = socket(AF_INET, SOCK_STREAM, 0);
     if (socketDescritor == -1)
     {
-        perror("# ERRO - Falha ao criar socket:");
-        return EXIT_FAILURE;
+        perror("# ERRO FATAL - Falha ao criar socket");
+        finalizarPrograma();
     }
 
     printf("> Socket do servidor criado com descritor: %d\n", socketDescritor);
@@ -187,36 +207,35 @@ int main()
     int sim = 1;
     if (setsockopt(socketDescritor, SOL_SOCKET, SO_REUSEADDR, &sim, sizeof(int)) == -1)
     {
-        perror("# ERRO - Erro na porta do socket:");
-        return EXIT_FAILURE;
+        perror("# ERRO FATAL - Erro na porta do socket");
+        finalizarPrograma();
     }
 
     //Associa o socket à porta
     if (bind(socketDescritor, (struct sockaddr *)&servidor, sizeof(servidor)) == -1)
     {
-        perror("# ERRO - Erro ao fazer bind:");
-        return EXIT_FAILURE;
+        perror("# ERRO FATAL - Erro ao fazer bind");
+        finalizarPrograma();
     }
 
     // Aguarda conexões de clientes
     if (listen(socketDescritor, 1) == -1)
     {
-        perror("# ERRO - Erro ao ouvir conexões:");
-        return EXIT_FAILURE;
+        perror("# ERRO FATAL- Erro ao ouvir conexões:");
+        finalizarPrograma();
     }
     printf("> Ouvindo na porta %d\n", PORTA);
-    pausarPrograma();
 
     do
     {
-        system("clear");
+        imprimirDecoracao();
         //Aceita e trata conexões
         puts("> Aguardando por conexões...");
         socklen_t clienteLenght = sizeof(cliente);
         if ((conexao = accept(socketDescritor, (struct sockaddr *)&cliente, &clienteLenght)) == -1)
         {
-            perror("# ERRO - Erro ao aceitar conexão:");
-            return EXIT_FAILURE;
+            perror("# ERRO FATAL - Falha ao aceitar conexão");
+            finalizarPrograma();
         }
 
         //Obtém IP e porta do cliente
@@ -235,11 +254,11 @@ int main()
         {
             imprimirDecoracao();
             puts("\t\t> MENU DE OPERAÇÕES <");
-            operacao = atoi(receberDadosCliente("operação do menu"));
+            operacao = atoi(receberDadosCliente("op", "operação do menu"));
 
             if (operacao == 0)
             {
-                finalizarConexaoCliente();
+                finalizarConexao();
                 break;
             }
 
@@ -248,18 +267,18 @@ int main()
             {
             case 1: //Login
                 imprimirDecoracao();
-                printf("\t\t\t>> AUTENTICAÇÃO <<");
+                printf("\t\t>> AUTENTICAÇÃO <<");
                 imprimirDecoracao();
-                if (autenticar(1))
+                if (autenticar())
                 {
-                    puts("> Cliente está autenticado.");
-                    // finalizarConexaoCliente(conexao);
+                    puts("§ Cliente está autenticado.");
+                    // finalizarConexao(conexao);
                     // finalizarPrograma();
                 }
                 break;
             case 2: //Cadastro
                 imprimirDecoracao();
-                printf("\n\t\t\t>> CADASTRO <<\n\n");
+                printf("\n\t\t>> CADASTRO <<\n\n");
                 imprimirDecoracao();
                 cadastrarUsuario();
                 break;
@@ -269,7 +288,7 @@ int main()
             }
         } while (1);
         imprimirDecoracao();
-        puts("> Deseja finalizar o servidor [s/n]?\n");
+        puts("<?> Deseja finalizar o servidor [s/n]?\n");
         if (getchar() == 's')
         {
             getchar();
@@ -312,7 +331,7 @@ int pegarProximoId(char *arquivo)
 }
 
 /**
- * Função para cadastrar novo usuário, solicita todos os dados ao usuário e insere no arquivo de dados dos usuários
+ * Função para cadastrar novo usuário, chama função para solicitar todos os dados ao usuário e insere no arquivo de dados dos usuários
  */
 void cadastrarUsuario()
 {
@@ -321,7 +340,7 @@ void cadastrarUsuario()
         return;
 
     printf("\n> Usuário deve fornecer as informações necessárias para efetuar o cadastro:\n");
-    coletarDados(1, 1, 1, 1);
+    coletarDados();
 
     u.codigo = pegarProximoId(arquivoUsuarios); //Define o ID do usuário que está se cadastrando
 
@@ -345,92 +364,70 @@ void cadastrarUsuario()
     }
 
     fecharArquivo(ponteiroArquivos); //Fecha o arquivo
-    // limparEstruturaUsuario();
 }
 
 /**
- * Coletar dados do usuário, chame a função definindo o parâmetro no valor 1 no respectivo dado que deseja solicitar ao usuário
+ * Coletar dados de cadastro do usuário
  */
-void coletarDados(short int nome, short int sobrenome, short int identificador, short int senha)
+void coletarDados()
 {
     char entradaTemp[MAX];                           //Variável para fazer a entrada de valores digitados e realizar a validação antes de atribuir à variável correta
     memset(&entradaTemp[0], 0, sizeof(entradaTemp)); //Limpando a variável para garantir que não entre lixo de memória
 
-    //Solicita o nome do usuário
-    if (nome)
+    /*Solicita o nome do usuário*/
+    //Loop para validação do nome, enquanto a função que valida a string retornar 0 (falso) o loop vai continuar (há uma negação na frente do retorno da função)
+    printf("\n> PRIMEIRO NOME: \n");
+    do
     {
-        //Loop para validação do nome, enquanto a função que valida a string retornar 0 (falso) o loop vai continuar (há uma negação na frente do retorno da função)
-        printf("\n> PRIMEIRO NOME: \n");
-        do
-        {
-            setbuf(stdin, NULL);                                         //Limpa a entrada par evitar lixo
-            strcpy(entradaTemp, receberDadosCliente("nome do usuário")); //Leitura do teclado, o %[^\n] vai fazer com que o programa leia tudo que o usuário digitar exceto ENTER (\n), por padrão pararia de ler no caractere espaço
-        } while (!validarStringPadrao(entradaTemp));
-        //Se sair do loop é porque a string é válida e pode ser copiada para a variável correta que irá guardar
-        strcpy(u.nome, entradaTemp);
-        //Transformar o nome em maiúsculo para padronização do arquivo
-        alternarCapitalLetras(u.nome, 1);
-        //Limpar a variável temporária para receber a próxima entrada
-        memset(&entradaTemp[0], 0, sizeof(entradaTemp));
-    }
+        setbuf(stdin, NULL);                                               //Limpa a entrada par evitar lixo
+        strcpy(entradaTemp, receberDadosCliente("rp", "nome do usuário")); //Leitura do teclado, o %[^\n] vai fazer com que o programa leia tudo que o usuário digitar exceto ENTER (\n), por padrão pararia de ler no caractere espaço
+    } while (!validarStringPadrao(entradaTemp));
+    //Se sair do loop é porque a string é válida e pode ser copiada para a variável correta que irá guardar
+    strcpy(u.nome, entradaTemp);
+    //Transformar o nome em maiúsculo para padronização do arquivo
+    alternarCapitalLetras(u.nome, 1);
+    //Limpar a variável temporária para receber a próxima entrada
+    memset(&entradaTemp[0], 0, sizeof(entradaTemp));
 
-    //Solicita o sobrenome do usuário
-    // for (int i = 1; i < 10000000; i++)
-    //     ;
-    // enviarDadosCliente("\n> Informe seu último sobrenome: ");
-    if (sobrenome)
+    printf("\n> ÚLTIMO SOBRENOME: \n");
+    do
     {
-        printf("\n> ÚLTIMO SOBRENOME: \n");
-        do
-        {
-            // printf("\n> Informe seu último sobrenome: ");
-            setbuf(stdin, NULL);
-            strcpy(entradaTemp, receberDadosCliente("sobrenome do usuário"));
-        } while (!validarStringPadrao(entradaTemp));
-        strcpy(u.sobrenome, entradaTemp);
-        alternarCapitalLetras(u.sobrenome, 1);
-        memset(&entradaTemp[0], 0, sizeof(entradaTemp));
-    }
+        // printf("\n> Informe seu último sobrenome: ");
+        setbuf(stdin, NULL);
+        strcpy(entradaTemp, receberDadosCliente("ru", "sobrenome do usuário"));
+    } while (!validarStringPadrao(entradaTemp));
+    strcpy(u.sobrenome, entradaTemp);
+    alternarCapitalLetras(u.sobrenome, 1);
+    memset(&entradaTemp[0], 0, sizeof(entradaTemp));
 
     //Solicita que o usuário crie um identificador
-    if (identificador)
+
+    printf("\n> IDENTIFICADOR: \n");
+    do
     {
-        printf("\n> IDENTIFICADOR: \n");
-        do
-        {
-            // printf("\n> Crie seu login: ");
-            setbuf(stdin, NULL);
-            strcpy(entradaTemp, receberDadosCliente("identificador do usuário"));
-        } while (!validarIdentificador(entradaTemp));
-        strcpy(u.identificador, entradaTemp);
-        memset(&entradaTemp[0], 0, sizeof(entradaTemp));
-    }
+        // printf("\n> Crie seu login: ");
+        setbuf(stdin, NULL);
+        strcpy(entradaTemp, receberDadosCliente("ri", "identificador do usuário"));
+    } while (!validarIdentificador(entradaTemp));
+    strcpy(u.identificador, entradaTemp);
+    memset(&entradaTemp[0], 0, sizeof(entradaTemp));
 
     //Solicita o usuário crie uma senha
-    if (senha)
-    {
-        printf("\n> SENHA: \n");
-        do
-        {
-            setbuf(stdin, NULL);
-            //getpass() é usado para desativar o ECHO do console e não exibir a senha sendo digitada pelo usuário, retorna um ponteiro apontando para um buffer contendo a senha, terminada em '\0' (NULL)
-            // puts("\n> Crie uma senha: ");
-            strcpy(entradaTemp, receberDadosCliente("senha do usuário"));
-        } while (!validarSenha(entradaTemp));
-        strcpy(u.senha, entradaTemp);
-        memset(&entradaTemp[0], 0, sizeof(entradaTemp));
 
-        // //Gerar o valor pseudoaleatório do salt desse usuário e jogar na variável salt dele
-        // gerarSalt();
-        // //Realiza a criptografia da senha com a função 'crypt' e define o valor na variável senhaCriptografada do usuário
-        // criptografarSenha();
-    }
+    printf("\n> SENHA: \n");
+    do
+    {
+        setbuf(stdin, NULL);
+        //getpass() é usado para desativar o ECHO do console e não exibir a senha sendo digitada pelo usuário, retorna um ponteiro apontando para um buffer contendo a senha, terminada em '\0' (NULL)
+        // puts("\n> Crie uma senha: ");
+        strcpy(entradaTemp, receberDadosCliente("rs", "senha do usuário"));
+    } while (!validarSenha(entradaTemp));
+    strcpy(u.senha, entradaTemp);
+    memset(&entradaTemp[0], 0, sizeof(entradaTemp));
 }
 
 /**
  * Realizar a autenticação do usuário
- * @param ehLogin deve ser passado como 1 caso a chamada da função está sendo realizada para login e não somente autenticação, 
- * quando for login a função vai definir os dados do usuário, trazidos do arquivo, na estrutura
  * @return 1 em caso de sucesso e; 0 em outros casos
  */
 short int autenticar()
@@ -441,9 +438,9 @@ short int autenticar()
     do
     {
         puts("# LOGIN: ");
-        strcpy(u.identificador, receberDadosCliente("identificador"));
+        strcpy(u.identificador, receberDadosCliente("li", "identificador"));
         puts("# SENHA: ");
-        strcpy(u.senha, receberDadosCliente("senha"));
+        strcpy(u.senha, receberDadosCliente("ls", "senha"));
 
         //Validação para caso o arquivo não possa ser aberto
         if (testarArquivo(arquivoUsuarios))
@@ -483,7 +480,7 @@ short int autenticar()
         fecharArquivo(ponteiroArquivos);
         enviarDadosCliente("# FALHA - Usuário e/ou senha incorretos!");
 
-        if (atoi(receberDadosCliente("confirmação para voltar ao menu")))
+        if (atoi(receberDadosCliente("cm", "confirmação para voltar ao menu")))
         {
             break;
         }
@@ -532,9 +529,6 @@ short int validarStringPadrao(char *string)
     //Verifica o tamanho da string
     if (strlen(string) > 50 || strlen(string) < 2)
     {
-        // enviarDadosCliente("0");
-        // for (int i = 1; i < 10000000; i++)
-        //     ;
         enviarDadosCliente("# FALHA [QUANTIDADE DE CARACTERES]: esse dado deve conter no mínimo 2 letras e no máximo 50!\n> Tente novamente: ");
         return 0;
     }
@@ -545,9 +539,6 @@ short int validarStringPadrao(char *string)
         //Usando a função isalpha da biblioteca ctype.h, é possível verificar se o caractere é alfabético
         if (!isalpha(string[i]))
         {
-            // enviarDadosCliente("0");
-            // for (int i = 1; i < 10000000; i++)
-            //     ;
             enviarDadosCliente("# FALHA [CARACTERE INVÁLIDO]: insira somente caracteres alfabéticos nesse campo, sem espaços ou pontuações.\n> Tente novamente: ");
             return 0;
         }
@@ -733,7 +724,7 @@ void gerarSalt()
     //Verifica se a função retornou todo os bytes necessários
     if (retorno != SALT_SIZE)
     {
-        perror("# ERRO - A geração de caracteres para criação do salt não foi bem sucedida\n");
+        perror("# ERRO - A geração de caracteres para criação do salt não foi bem sucedida");
         return;
     }
 
@@ -877,8 +868,7 @@ void fecharArquivo(FILE *arquivo)
     {
         system("cls || clear");
         printf("# ERRO - Ocorreu um erro ao fechar um arquivo necessário, o programa foi abortado para prevenir mais erros.");
-        printf("# Contate o desenvolvedor para verificar o problema.");
-        finalizarConexaoCliente();
+        finalizarConexao();
         finalizarPrograma();
     }
 }
