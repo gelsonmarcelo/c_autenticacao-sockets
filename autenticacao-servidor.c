@@ -23,8 +23,9 @@
 #define MAX_SENHA 31
 //Parâmetro da função crypt
 #define PARAMETRO_CRYPT "$6$rounds=20000$%s$"
-//###
+//Tamanho da mensagem trocada entre cliente/servidor
 #define MAX_MSG 1024
+//Porta de conexão onde o servidor está ouvindo
 #define PORTA 3344
 
 /**
@@ -56,7 +57,7 @@ struct Usuario u; //Declaração da estrutura do usuário
 
 int pegarProximoId(char *arquivo);
 short int autenticar();
-short int validarStringPadrao(char *string);
+short int validarStringPadrao(char *string, char *idSincronia);
 short int validarIdentificador(char *identificador);
 short int validarSenha(char *senha);
 short int excluirDados();
@@ -73,7 +74,7 @@ void finalizarPrograma();
 void fecharArquivo();
 void finalizarConexao();
 char *receberDadosCliente(char *idSincronia, char *dadoEsperado);
-void enviarDadosCliente(char *dadosServidor);
+void enviarDadosCliente(char *idSincronia, char *dadosServidor);
 
 /**
  * Estrutura para organização dos dados do usuário
@@ -123,24 +124,34 @@ char *receberDadosCliente(char *idSincronia, char *dadoEsperado)
         finalizarConexao();
         finalizarPrograma();
     }
-    //Retorna somente a parte da mensagem recebida, após o /
-    return strsep(&msgClienteLocal, "/");
+    return msgClienteLocal; //Retorna somente a parte da mensagem recebida, após o /
 }
 
 /**
  * Escreve uma mensagem no socket a ser lido pelo cliente
+ * @param idSincronia é o identificador que será verificado no cliente para saber se a mensagem recebida é um dado esperado
  * @param dadosServidor é a string com dados que o cliente precisa enviar
- * ### Adicionar id de sincronização
  */
-void enviarDadosCliente(char *dadosServidor)
+void enviarDadosCliente(char *idSincronia, char *dadosServidor)
 {
-    //Escreve no socket de comunicação e valida se não houve erro
-    if (write(conexao, dadosServidor, strlen(dadosServidor)) < 0)
-    {
-        printf("# ERRO - Falha ao enviar mensagem:\n\"%s\"\n", dadosServidor);
+    char *msgServidor = malloc(MAX_MSG);                       //Armazena a mensagem a ser enviada contendo id e dados
+    sprintf(msgServidor, "%s/%s", idSincronia, dadosServidor); //Insere o id de sincronização e dados em formato específico na mensagem
+
+    //Verificar o tamanho da string a ser enviada
+    if(strlen(msgServidor) > MAX_MSG){
+        printf("# ERRO FATAL - Os dados que o servidor tentou enviar excederam o limite de caracteres, envio cancelado.\n");
+        finalizarConexao();
         return;
     }
-    printf("\n§ Mensagem enviada para o cliente:\n\"%s\"\n", dadosServidor);
+
+    //Escreve no socket de comunicação e valida se não houve erro
+    if (write(conexao, msgServidor, strlen(msgServidor)) < 0)
+    {
+        printf("# ERRO - Falha ao enviar mensagem:\n\"%s\"\n", msgServidor);
+        return;
+    }
+    printf("\n§ Mensagem enviada para o cliente:\n\"%s\"\n", msgServidor);
+    free(msgServidor); //Libera a memória alocada
 }
 
 /**
@@ -160,7 +171,7 @@ void finalizarConexao()
         perror("# ERRO - Não foi possível fechar a comunicação");
         return;
     }
-    puts("> SUCESSO - Conexão com cliente encerrada");
+    puts("> INFO - Conexão com cliente encerrada");
 }
 
 /**
@@ -169,6 +180,7 @@ void finalizarConexao()
 int main()
 {
     setlocale(LC_ALL, "Portuguese"); //Permite a utilização de acentos e caracteres do português nas impressões
+    char *msgServidor = malloc(MAX_MSG);
 
     //Verifica arquivos necessários para o programa iniciar
     if (testarArquivo(arquivoUsuarios))
@@ -271,7 +283,8 @@ int main()
                 imprimirDecoracao();
                 if (autenticar())
                 {
-                    puts("§ Cliente está autenticado.");
+                    sprintf(msgServidor, "\n¬ Nome: %s\n¬ Sobrenome: %s\n¬ Identificador: %s\n¬ Senha Criptografada: %s\n", u.nome, u.sobrenome, u.identificador, u.senhaCriptografada);
+                    enviarDadosCliente("du", msgServidor);
                     // finalizarConexao(conexao);
                     // finalizarPrograma();
                 }
@@ -283,7 +296,7 @@ int main()
                 cadastrarUsuario();
                 break;
             default:
-                printf("# FALHA [OPÇÃO INVÁLIDA] - Você digitou uma opção inválida, tente novamente!\n");
+                printf("# ERRO - Comando recebido desconhecido\n");
                 break;
             }
         } while (1);
@@ -356,11 +369,11 @@ void cadastrarUsuario()
     //Insere a string com todos os dados no arquivo e valida se não ocorreram erros
     if (fputs(u.linhaUsuario, ponteiroArquivos) == EOF)
     {
-        enviarDadosCliente("# ERRO - Houve algum problema para inserir os dados no arquivo.\n");
+        enviarDadosCliente("rf", "# ERRO - Houve algum problema para inserir os dados no arquivo");
     }
     else
     {
-        enviarDadosCliente("> SUCESSO - Cadastro realizado: realize login para acessar o sistema.\n");
+        enviarDadosCliente("rf", "> SUCESSO - Cadastro realizado: faça login para acessar o sistema");
     }
 
     fecharArquivo(ponteiroArquivos); //Fecha o arquivo
@@ -381,7 +394,7 @@ void coletarDados()
     {
         setbuf(stdin, NULL);                                               //Limpa a entrada par evitar lixo
         strcpy(entradaTemp, receberDadosCliente("rp", "nome do usuário")); //Leitura do teclado, o %[^\n] vai fazer com que o programa leia tudo que o usuário digitar exceto ENTER (\n), por padrão pararia de ler no caractere espaço
-    } while (!validarStringPadrao(entradaTemp));
+    } while (!validarStringPadrao(entradaTemp, "rp"));
     //Se sair do loop é porque a string é válida e pode ser copiada para a variável correta que irá guardar
     strcpy(u.nome, entradaTemp);
     //Transformar o nome em maiúsculo para padronização do arquivo
@@ -395,7 +408,7 @@ void coletarDados()
         // printf("\n> Informe seu último sobrenome: ");
         setbuf(stdin, NULL);
         strcpy(entradaTemp, receberDadosCliente("ru", "sobrenome do usuário"));
-    } while (!validarStringPadrao(entradaTemp));
+    } while (!validarStringPadrao(entradaTemp, "ru"));
     strcpy(u.sobrenome, entradaTemp);
     alternarCapitalLetras(u.sobrenome, 1);
     memset(&entradaTemp[0], 0, sizeof(entradaTemp));
@@ -471,14 +484,14 @@ short int autenticar()
                 strcpy(u.senhaCriptografada, criptografiaArquivo);
                 //Salvar o formato da linha do usuário autenticado
                 // sprintf(u.linhaUsuario, "%d|%s|%s|%s|%s|%s\n", u.codigo, u.identificador, u.salt, u.senhaCriptografada, u.nome, u.sobrenome);
-                enviarDadosCliente("> SUCESSO - Login realizado!");
+                enviarDadosCliente("au", "> SUCESSO - Login realizado!");
                 fecharArquivo(ponteiroArquivos); //Fecha o arquivo
                 return 1;
             }
         }
         //Se sair do loop é porque não autenticou por erro de login/senha
         fecharArquivo(ponteiroArquivos);
-        enviarDadosCliente("# FALHA - Usuário e/ou senha incorretos!");
+        enviarDadosCliente("au", "# FALHA - Usuário e/ou senha incorretos!");
 
         if (atoi(receberDadosCliente("cm", "confirmação para voltar ao menu")))
         {
@@ -524,12 +537,12 @@ char *alternarCapitalLetras(char *string, int flag)
  * Verifica se a string passada como parâmetro contém somente caracteres alfabéticos e se o tamanho está entre 2 e 50 letras
  * @return 1 caso a string seja válida; 0 caso string inválida
  */
-short int validarStringPadrao(char *string)
+short int validarStringPadrao(char *string, char *idSincronia)
 {
     //Verifica o tamanho da string
     if (strlen(string) > 50 || strlen(string) < 2)
     {
-        enviarDadosCliente("# FALHA [QUANTIDADE DE CARACTERES]: esse dado deve conter no mínimo 2 letras e no máximo 50!\n> Tente novamente: ");
+        enviarDadosCliente(idSincronia, "# FALHA [QUANTIDADE DE CARACTERES]: esse dado deve conter no mínimo 2 letras e no máximo 50!\n> Tente novamente: ");
         return 0;
     }
 
@@ -539,12 +552,12 @@ short int validarStringPadrao(char *string)
         //Usando a função isalpha da biblioteca ctype.h, é possível verificar se o caractere é alfabético
         if (!isalpha(string[i]))
         {
-            enviarDadosCliente("# FALHA [CARACTERE INVÁLIDO]: insira somente caracteres alfabéticos nesse campo, sem espaços ou pontuações.\n> Tente novamente: ");
+            enviarDadosCliente(idSincronia, "# FALHA [CARACTERE INVÁLIDO]: insira somente caracteres alfabéticos nesse campo, sem espaços ou pontuações.\n> Tente novamente: ");
             return 0;
         }
     }
     //Se chegou aqui é válido
-    enviarDadosCliente("> SUCESSO: palavra aprovada!");
+    enviarDadosCliente(idSincronia, "> SUCESSO: palavra aprovada!");
     return 1;
 }
 
@@ -561,7 +574,7 @@ short int validarIdentificador(char *identificador)
     //Verifica tamanho do identificador
     if (strlen(identificador) < 5 || strlen(identificador) > 15)
     {
-        enviarDadosCliente("# FALHA [IDENTIFICADOR INVÁLIDO] - Não contém tamanho permitido (mínimo 5 e máximo 15)\n> Tente novamente: ");
+        enviarDadosCliente("ri", "# FALHA [IDENTIFICADOR INVÁLIDO] - Não contém tamanho permitido (mínimo 5 e máximo 15)\n> Tente novamente: ");
         return 0;
     }
 
@@ -570,7 +583,7 @@ short int validarIdentificador(char *identificador)
     {
         if (!isalnum(identificador[i]) && identificador[i] != '.')
         {
-            enviarDadosCliente("# FALHA [IDENTIFICADOR INVÁLIDO] - Contém caracteres não permitidos\n# O identificador pode conter somente caracteres alfanuméricos e ponto final.\n> Tente novamente: ");
+            enviarDadosCliente("ri", "# FALHA [IDENTIFICADOR INVÁLIDO] - Contém caracteres não permitidos\n# O identificador pode conter somente caracteres alfanuméricos e ponto final.\n> Tente novamente: ");
             return 0;
         }
     }
@@ -580,7 +593,7 @@ short int validarIdentificador(char *identificador)
     //Se o identificador for igual ao nome ou sobrenome, é inválido.
     if (!strcmp(identificadorMaiusculo, u.nome) || !strcmp(identificadorMaiusculo, u.sobrenome))
     {
-        enviarDadosCliente("# FALHA [IDENTIFICADOR INVÁLIDO] - Identificador não pode ser seu nome ou sobrenome!\n> Tente novamente: ");
+        enviarDadosCliente("ri", "# FALHA [IDENTIFICADOR INVÁLIDO] - Identificador não pode ser seu nome ou sobrenome!\n> Tente novamente: ");
         return 0;
     }
 
@@ -602,15 +615,14 @@ short int validarIdentificador(char *identificador)
         if (!strcmp(identificadorArquivo, identificadorMaiusculo))
         {
             //Se entrar aqui o identificador já foi utilizado
-            enviarDadosCliente("# FALHA [IDENTIFICADOR INVÁLIDO] - Já está sendo utilizado!\n> Tente novamente: ");
+            enviarDadosCliente("ri", "# FALHA [IDENTIFICADOR INVÁLIDO] - Já está sendo utilizado!\n> Tente novamente: ");
             fecharArquivo(ponteiroArquivos);
-            enviarDadosCliente("0");
             return 0;
         }
     }
     fecharArquivo(ponteiroArquivos); //Fecha o arquivo
     //Se chegou até aqui, passou pelas validações, retorna 1 - true
-    enviarDadosCliente("> SUCESSO: identificador aprovado!");
+    enviarDadosCliente("ri", "> SUCESSO: identificador aprovado!");
     return 1;
 }
 
@@ -628,7 +640,7 @@ short int validarSenha(char *senha)
     //Verifica tamanho da senha
     if (strlen(senha) < 8 || strlen(senha) > 30)
     {
-        enviarDadosCliente("# FALHA [SENHA INVÁLIDA] - Não contém tamanho permitido (mínimo 8 e máximo 30)\n> Tente novamente: ");
+        enviarDadosCliente("rs", "# FALHA [SENHA INVÁLIDA] - Não contém tamanho permitido (mínimo 8 e máximo 30)");
         return 0;
     }
 
@@ -654,14 +666,14 @@ short int validarSenha(char *senha)
             //Verifica se a senha contém +2 números ordenados em sequência (ascendente ou descendente)
             if (((senha[i] - '0') + 1 == senha[i + 1] - '0' && (senha[i] - '0') + 2 == senha[i + 2] - '0') || ((senha[i] - '1') == senha[i + 1] - '0' && (senha[i] - '2') == senha[i + 2] - '0'))
             {
-                enviarDadosCliente("# FALHA [SENHA INVÁLIDA] - contém números ordenados em sequência\n> Tente novamente: ");
+                enviarDadosCliente("rs", "# FALHA [SENHA INVÁLIDA] - contém números ordenados em sequência");
                 return 0;
             }
 
             //Verifica se a senha contém +2 números repetidos em sequência
             if (senha[i] == senha[i + 1] && senha[i] == senha[i + 2])
             {
-                enviarDadosCliente("# FALHA [SENHA INVÁLIDA] - contém números repetidos em sequência\n> Tente novamente: ");
+                enviarDadosCliente("rs", "# FALHA [SENHA INVÁLIDA] - contém números repetidos em sequência");
                 return 0;
             }
         }
@@ -672,7 +684,7 @@ short int validarSenha(char *senha)
         }
         else
         {
-            enviarDadosCliente("# FALHA [SENHA INVÁLIDA] - Sua senha contém caracteres que nao são nem alfanuméricos nem especiais ou espaço.\n# Verifique a digitação e tente novamente.\n# Caracteres permitidos:\n#\tEspeciais: ! \" # $ %% & ' ( ) * + , - . / : ; < = > ? @ [ \\ ] ^ _ ` { | } ~ [ESPAÇO]\n#\tNuméricos: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9\n#\tAlfabéticos: a b c d e f g h i j k l m n o p q r s t u v w x y z #\t\t\tA B C D E F G H I J K L M N O P Q R S T U V W X Y Z\n> Tente novamente: ");
+            enviarDadosCliente("rs", "# FALHA [SENHA INVÁLIDA] - Sua senha contém caracteres que nao são nem alfanuméricos nem especiais ou espaço.\n# Verifique a digitação e tente novamente.\n# Caracteres permitidos:\n#\tEspeciais: ! \" # $ %% & ' ( ) * + , - . / : ; < = > ? @ [ \\ ] ^ _ ` { | } ~ [ESPAÇO]\n#\tNuméricos: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9\n#\tAlfabéticos: a b c d e f g h i j k l m n o p q r s t u v w x y z #\t\t\tA B C D E F G H I J K L M N O P Q R S T U V W X Y Z");
             return 0;
         }
     } //Fim do loop que passa pelos caracteres da senha
@@ -680,29 +692,29 @@ short int validarSenha(char *senha)
     //Valida a quantidade de caracteres especiais
     if (contEspeciais < 2)
     {
-        enviarDadosCliente("# FALHA [SENHA INVÁLIDA] - Não contém caracteres especiais suficientes\n> Tente novamente: ");
+        enviarDadosCliente("rs", "# FALHA [SENHA INVÁLIDA] - Não contém caracteres especiais suficientes");
         return 0;
     }
     //Verifica se contém números e letras
     if ((contminusculas + contmaiusculas) == 0 || contNumeros == 0)
     {
-        enviarDadosCliente("# FALHA [SENHA INVÁLIDA] - Não contém letras e números\n> Tente novamente: ");
+        enviarDadosCliente("rs", "# FALHA [SENHA INVÁLIDA] - Não contém letras e números");
         return 0;
     }
     //Verifica se contém minúsculas
     if (contminusculas == 0)
     {
-        enviarDadosCliente("# FALHA [SENHA INVÁLIDA] - Não contém qualquer letra minúscula\n> Tente novamente: ");
+        enviarDadosCliente("rs", "# FALHA [SENHA INVÁLIDA] - Não contém qualquer letra minúscula");
         return 0;
     }
     //Verifica se contém maiúsculas
     if (contmaiusculas == 0)
     {
-        enviarDadosCliente("# FALHA [SENHA INVÁLIDA] - Não contém qualquer letra maiúscula\n> Tente novamente: ");
+        enviarDadosCliente("rs", "# FALHA [SENHA INVÁLIDA] - Não contém qualquer letra maiúscula");
         return 0;
     }
 
-    enviarDadosCliente("> SUCESSO - Sua senha está de acordo com a política e foi aprovada!\n");
+    enviarDadosCliente("rs", "> SUCESSO - Sua senha está de acordo com a política e foi aprovada!");
     return 1;
 }
 
@@ -854,6 +866,7 @@ void pausarPrograma()
  */
 void finalizarPrograma()
 {
+    imprimirDecoracao();
     setbuf(stdin, NULL);
     printf("# SISTEMA FINALIZADO.\n");
     exit(0);

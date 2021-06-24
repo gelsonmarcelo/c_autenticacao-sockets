@@ -11,8 +11,6 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
-//Tamanho definido do salt
-#define SALT_SIZE 16
 //Valor grande para ser utilizado como tamanho em algumas strings
 #define MAX 2048
 //Tamanho máximo das strings padrão de dados comuns (contando com o último caractere NULL)
@@ -21,11 +19,11 @@
 #define MAX_IDENTIFICADOR 16
 //Tamanho máximo da string da senha (contando com o último caractere NULL)
 #define MAX_SENHA 31
-//Parâmetro da função crypt
-#define PARAMETRO_CRYPT "$6$rounds=20000$%s$"
-//###
+//Tamanho da mensagem trocada entre cliente/servidor
 #define MAX_MSG 1024
+//Porta de conexão onde o servidor está ouvindo
 #define PORTA 3344
+//Endereço IP que se encontra o servidor
 #define ENDERECO_SERVIDOR "127.0.0.1"
 
 /**
@@ -78,11 +76,19 @@ struct Usuario
  * Concatena o id de sincronização à mensagem e escreve no socket a ser lido pelo servidor
  * @param idSincronia é o identificador que será verificado no servidor para saber se a mensagem recebida é um dado esperado
  * @param dadosCliente é a string com dados que o cliente precisa enviar
- */ 
+ */
 void enviarDadosServidor(char *idSincronia, char *dadosCliente)
 {
-    char *msgCliente = malloc(sizeof(idSincronia) + sizeof(dadosCliente)); //Armazena a mensagem a ser enviada contendo id e dados
+    char *msgCliente = malloc(MAX_MSG);                      //Armazena a mensagem a ser enviada contendo id e dados
     sprintf(msgCliente, "%s/%s", idSincronia, dadosCliente); //Insere o id de sincronização e dados em formato específico na mensagem
+
+    //Verificar o tamanho da string a ser enviada
+    if(strlen(msgCliente) > MAX_MSG){
+        printf("# ERRO FATAL - Os dados que pretende enviar ao servidor excederam o limite de caracteres, envio cancelado.\n");
+        finalizarConexao();
+        finalizarPrograma();
+    }
+
     //Escreve no socket e valida se não houveram erros
     if (write(socketDescritor, msgCliente, strlen(msgCliente)) < 0)
     {
@@ -90,26 +96,39 @@ void enviarDadosServidor(char *idSincronia, char *dadosCliente)
         return;
     }
     // printf("\n§ msgEnviada: %s\n", msgCliente);
-    free(msgCliente); //Libera a memória alocada para o cliente
+    free(msgCliente); //Libera a memória alocada
 }
 
 /**
  * Lê dados escritos pelo servidor no socket de comunicação
+ * @param idSincronia é o identificador que será comparado com a mensagem recebida do cliente, para saber se a mensagem é um dado esperado
  * @return a mensagem recebida do servidor
- * ### inserir id de sincronização
  */
-char *receberDadosServidor()
+char *receberDadosServidor(char *idSincronia)
 {
-    int tamanho;
+    int tamanho; //Guarda o tamanho da mensagem recebida pelo servidor
+    char *msgServidorLocal = malloc(MAX_MSG);
+
     //Lê resposta do servidor e valida se não houveram erros
-    if ((tamanho = read(socketDescritor, msgServidor, MAX_MSG)) < 0)
+    if ((tamanho = read(socketDescritor, msgServidorLocal, MAX_MSG)) < 0)
     {
         perror("# ERRO - Falha ao receber resposta");
         finalizarConexao();
         finalizarPrograma();
     }
-    msgServidor[tamanho] = '\0'; //Adiciona NULL no final da string
-    return msgServidor;
+    msgServidorLocal[tamanho] = '\0'; //Adiciona NULL no final da string
+
+    // printf("\n§ msgCliente Recebida: %s\n", msgServidorLocal);
+
+    //Separa o identificador de sincronização e compara se era esse identificador que o programa estava esperando
+    if (strcmp(strsep(&msgServidorLocal, "/"), idSincronia))
+    {
+        //Se não for, houve algum problema na sincronização cliente/servidor e eles não estão comunicando corretamente
+        puts("\n# ERRO FATAL - Servidor e cliente não estão sincronizados...");
+        finalizarConexao();
+        finalizarPrograma();
+    }
+    return msgServidorLocal; //Retorna somente a parte da mensagem recebida, após o /
 }
 
 /**
@@ -117,12 +136,14 @@ char *receberDadosServidor()
  */
 void finalizarConexao()
 {
+    imprimirDecoracao();
     //Fecha o socket
-    if(close(socketDescritor)){
+    if (close(socketDescritor))
+    {
         perror("# ERRO - Não foi possível fechar a comunicação");
         return;
     }
-    puts("> SUCESSO - Cliente desconectado");
+    puts("> INFO - Você foi desconectado.");
 }
 
 /**
@@ -197,7 +218,7 @@ int main()
         if (operacao == 0)
         {
             finalizarConexao();
-            break;
+            finalizarPrograma();
         }
 
         //Escolhe a operação conforme o valor que o usuário digitou
@@ -209,8 +230,8 @@ int main()
             imprimirDecoracao();
             if (autenticar())
             {
-                puts("> SUCESSO - Você entrou e saiu da área logada!");
-                // limparEstruturaUsuario();
+                printf("%s", receberDadosServidor("du"));
+                limparEstruturaUsuario();
             }
             break;
         case 2: //Cadastro
@@ -248,7 +269,7 @@ void cadastrarUsuario()
         setbuf(stdin, NULL);          //Limpa a entrada par evitar lixo
         scanf("%[^\n]", entradaTemp); //Leitura do teclado, o %[^\n] vai fazer com que o programa leia tudo que o usuário digitar exceto ENTER (\n), por padrão pararia de ler no caractere espaço
         enviarDadosServidor("rp", entradaTemp);
-        strcpy(msgServidor, receberDadosServidor());
+        strcpy(msgServidor, receberDadosServidor("rp"));
     } while (msgServidor[0] == '#');
     //Se sair do loop é porque a string é válida e pode ser copiada para a variável correta que irá guardar
     strcpy(u.nome, entradaTemp);
@@ -264,7 +285,7 @@ void cadastrarUsuario()
         setbuf(stdin, NULL);
         scanf("%[^\n]", entradaTemp);
         enviarDadosServidor("ru", entradaTemp);
-        strcpy(msgServidor, receberDadosServidor());
+        strcpy(msgServidor, receberDadosServidor("ru"));
     } while (msgServidor[0] == '#');
     strcpy(u.sobrenome, entradaTemp);
     memset(&entradaTemp[0], 0, sizeof(entradaTemp));
@@ -278,7 +299,7 @@ void cadastrarUsuario()
         setbuf(stdin, NULL);
         scanf("%[^\n]", entradaTemp);
         enviarDadosServidor("ri", entradaTemp);
-        strcpy(msgServidor, receberDadosServidor());
+        strcpy(msgServidor, receberDadosServidor("ri"));
     } while (msgServidor[0] == '#');
     strcpy(u.identificador, entradaTemp);
     memset(&entradaTemp[0], 0, sizeof(entradaTemp));
@@ -292,13 +313,13 @@ void cadastrarUsuario()
         //getpass() é usado para desativar o ECHO do console e não exibir a senha sendo digitada pelo usuário, retorna um ponteiro apontando para um buffer contendo a senha, terminada em '\0' (NULL)
         strcpy(entradaTemp, getpass("> Crie uma senha: "));
         enviarDadosServidor("rs", entradaTemp);
-        strcpy(msgServidor, receberDadosServidor());
+        strcpy(msgServidor, receberDadosServidor("rs"));
     } while (msgServidor[0] == '#');
     strcpy(u.senha, entradaTemp);
     memset(&entradaTemp[0], 0, sizeof(entradaTemp));
 
     limparEstruturaUsuario();
-    puts(receberDadosServidor());
+    puts(receberDadosServidor("rf"));
 }
 
 /**
@@ -319,7 +340,7 @@ short int autenticar()
         strcpy(u.senha, getpass("# SENHA: ")); //Lê a senha com ECHO do console desativado e copia o valor lido para a variável u.senha, do usuário
         enviarDadosServidor("ls", u.senha);
 
-        strcpy(msgServidor, receberDadosServidor());
+        strcpy(msgServidor, receberDadosServidor("au"));
         puts(msgServidor);
         if (msgServidor[0] == '#')
         {
@@ -388,6 +409,7 @@ void pausarPrograma()
  */
 void finalizarPrograma()
 {
+    imprimirDecoracao();
     setbuf(stdin, NULL);
     limparEstruturaUsuario();
     printf("\n# SISTEMA FINALIZADO.\n");
