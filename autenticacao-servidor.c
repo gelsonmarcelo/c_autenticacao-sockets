@@ -58,6 +58,7 @@ struct Usuario u; //Declaração da estrutura do usuário
 int pegarProximoId(char *arquivo);
 short int autenticar();
 short int validarStringPadrao(char *string, char *idSincronia);
+short int validarStringEmail(char *string);
 short int validarIdentificador(char *identificador);
 short int validarSenha(char *senha);
 short int excluirDados();
@@ -84,6 +85,7 @@ struct Usuario
     int codigo;                            //Mantém o código (ID do arquivo de dados) do usuário
     char nome[MAX_DADOS];                  //Guarda o nome do usuário (uma palavra)
     char sobrenome[MAX_DADOS];             //Guarda o sobrenome do usuário (uma palavra)
+    char email[MAX_DADOS];                 //Guarda o e-mail do usuário
     char identificador[MAX_IDENTIFICADOR]; //Guarda o identificador/login do usuário
     char salt[SALT_SIZE + 1];              //Guarda o salt aleatório gerado
     char senha[MAX_SENHA];                 //Guarda a senha do usuário
@@ -94,7 +96,7 @@ struct Usuario
 /**
  * Lê dados escritos pelo cliente no socket de comunicação, separa e analisa o id de sincronização e retorna a mensagem recebida
  * @param idSincronia é o identificador que será comparado com a mensagem recebida do cliente, para saber se a mensagem é um dado esperado
- * @param dadosEsperado apenas um breve descritivo para que possa ser acompanhado no console do servidor, qual dado ele está aguardando
+ * @param dadosEsperado apenas um breve descritivo para que possa ser acompanhado, no console do servidor, qual dado ele está aguardando
  * @return a mensagem recebida do cliente
  */
 char *receberDadosCliente(char *idSincronia, char *dadoEsperado)
@@ -283,7 +285,8 @@ int main()
                 imprimirDecoracao();
                 if (autenticar())
                 {
-                    sprintf(msgServidor, "\n¬ Nome: %s\n¬ Sobrenome: %s\n¬ Identificador: %s\n¬ Senha Criptografada: %s\n", u.nome, u.sobrenome, u.identificador, u.senhaCriptografada);
+                    //### - Fazer a área logada
+                    sprintf(msgServidor, "\n¬ Nome: %s\n¬ Sobrenome: %s\n¬ E-mail: %s\n¬ Identificador: %s\n¬ Senha Criptografada: %s\n", u.nome, u.sobrenome, u.email, u.identificador, u.senhaCriptografada);
                     enviarDadosCliente("du", msgServidor);
                     // finalizarConexao(conexao);
                     // finalizarPrograma();
@@ -306,7 +309,7 @@ int main()
         {
             getchar();
             setbuf(stdin, NULL);
-            break;
+            finalizarPrograma();
         }
         getchar();
         setbuf(stdin, NULL);
@@ -364,7 +367,7 @@ void cadastrarUsuario()
     criptografarSenha(u.senha);
 
     //Passar dados recebidos para a linha do usuário no formato que irão para o arquivo
-    sprintf(u.linhaUsuario, "%d|%s|%s|%s|%s|%s\n", u.codigo, u.identificador, u.salt, u.senhaCriptografada, u.nome, u.sobrenome);
+    sprintf(u.linhaUsuario, "%d|%s|%s|%s|%s|%s|%s\n", u.codigo, u.identificador, u.salt, u.senhaCriptografada, u.nome, u.sobrenome, u.email);
 
     //Insere a string com todos os dados no arquivo e valida se não ocorreram erros
     if (fputs(u.linhaUsuario, ponteiroArquivos) == EOF)
@@ -413,8 +416,17 @@ void coletarDados()
     alternarCapitalLetras(u.sobrenome, 1);
     memset(&entradaTemp[0], 0, sizeof(entradaTemp));
 
-    //Solicita que o usuário crie um identificador
+    printf("\n> E-MAIL: \n");
+    do
+    {
+        setbuf(stdin, NULL);
+        strcpy(entradaTemp, receberDadosCliente("re", "e-mail do usuário"));
+    } while (!validarStringEmail(entradaTemp));
+    strcpy(u.email, entradaTemp);
+    alternarCapitalLetras(u.email, 1);
+    memset(&entradaTemp[0], 0, sizeof(entradaTemp));
 
+    //Aguarda identificador
     printf("\n> IDENTIFICADOR: \n");
     do
     {
@@ -446,7 +458,7 @@ void coletarDados()
 short int autenticar()
 {
     //Variáveis que guardam os dados lidos nas linhas do arquivo
-    char identificadorArquivo[MAX_IDENTIFICADOR], saltArquivo[SALT_SIZE + 1], criptografiaArquivo[120], usuarioArquivo[MAX_DADOS], sobrenomeArquivo[MAX_DADOS];
+    char identificadorArquivo[MAX_IDENTIFICADOR], saltArquivo[SALT_SIZE + 1], criptografiaArquivo[120], usuarioArquivo[MAX_DADOS], sobrenomeArquivo[MAX_DADOS], emailArquivo[MAX_DADOS];
     int codigoArquivo = 0;
     do
     {
@@ -466,7 +478,7 @@ short int autenticar()
         while (!feof(ponteiroArquivos))
         {
             //Define os dados da linha lida nas variáveis na respectiva ordem do padrão lido
-            fscanf(ponteiroArquivos, "%d|%[^|]|%[^|]|%[^|]|%[^|]|%[^\n]", &codigoArquivo, identificadorArquivo, saltArquivo, criptografiaArquivo, usuarioArquivo, sobrenomeArquivo);
+            fscanf(ponteiroArquivos, "%d|%[^|]|%[^|]|%[^|]|%[^|]|%[^|]|%[^\n]", &codigoArquivo, identificadorArquivo, saltArquivo, criptografiaArquivo, usuarioArquivo, sobrenomeArquivo, emailArquivo);
 
             //Copia o salt lido do arquivo nessa linha para a variável u.salt, onde o criptografarSenha() irá usar
             strcpy(u.salt, saltArquivo);
@@ -479,11 +491,12 @@ short int autenticar()
                 u.codigo = codigoArquivo;
                 strcpy(u.nome, usuarioArquivo);
                 strcpy(u.sobrenome, sobrenomeArquivo);
+                strcpy(u.email, emailArquivo);
                 strcpy(u.identificador, identificadorArquivo);
                 strcpy(u.salt, saltArquivo);
                 strcpy(u.senhaCriptografada, criptografiaArquivo);
                 //Salvar o formato da linha do usuário autenticado
-                // sprintf(u.linhaUsuario, "%d|%s|%s|%s|%s|%s\n", u.codigo, u.identificador, u.salt, u.senhaCriptografada, u.nome, u.sobrenome);
+                sprintf(u.linhaUsuario, "%d|%s|%s|%s|%s|%s|%s\n", u.codigo, u.identificador, u.salt, u.senhaCriptografada, u.nome, u.sobrenome, u.email);
                 enviarDadosCliente("au", "> SUCESSO - Login realizado!");
                 fecharArquivo(ponteiroArquivos); //Fecha o arquivo
                 return 1;
@@ -493,7 +506,7 @@ short int autenticar()
         fecharArquivo(ponteiroArquivos);
         enviarDadosCliente("au", "# FALHA - Usuário e/ou senha incorretos!");
 
-        if (atoi(receberDadosCliente("cm", "confirmação para voltar ao menu")))
+        if (!atoi(receberDadosCliente("cm", "confirmação para repetir autenticação")))
         {
             break;
         }
@@ -558,6 +571,33 @@ short int validarStringPadrao(char *string, char *idSincronia)
     }
     //Se chegou aqui é válido
     enviarDadosCliente(idSincronia, "> SUCESSO: palavra aprovada!");
+    return 1;
+}
+
+/**
+ * Verifica se a string passada como parâmetro contém formato permitido para e-mail
+ * @return 1 caso a string seja válida; 0 caso string inválida
+ */
+short int validarStringEmail(char *string)
+{
+    //Variáveis para guardar as informações digitadas separadas
+    char usuario[256], site[256], dominio[256];
+
+    //Valida tamanho da string
+    if (strlen(string) > 50 || strlen(string) < 6)
+    {
+        enviarDadosCliente("re", "# FALHA [QUANTIDADE DE CARACTERES]: verifique o dado digitado, deve conter entre 6 e 50 caracteres\n> Tente novamente: ");
+        return 0;
+    }
+
+    // sscanf lê a entrada a partir da string no primeiro parâmetro, atribuindo para as variáveis. Retorna o número de campos convertidos e atribuídos com êxito.
+    if (sscanf(string, "%[^@ \t\n]@%[^. \t\n].%3[^ \t\n]", usuario, site, dominio) != 3)
+    {
+        enviarDadosCliente("re", "# FALHA [E-MAIL INVÁLIDO]: verifique o e-mail digitado\n> Tente novamente: ");
+        return 0;
+    }
+    //Se chegou aqui é porque a string é válida
+    enviarDadosCliente("re", "> SUCESSO: e-mail aprovado!");
     return 1;
 }
 
@@ -711,6 +751,15 @@ short int validarSenha(char *senha)
     if (contmaiusculas == 0)
     {
         enviarDadosCliente("rs", "# FALHA [SENHA INVÁLIDA] - Não contém qualquer letra maiúscula");
+        return 0;
+    }
+
+    //Solicita a confirmação da senha
+    enviarDadosCliente("rs", "* Solicitar a confirmação de senha...");
+    //Compara as 2 senhas informadas, se forem diferentes vai retornar != 0, entrando na condição
+    if (strcmp(receberDadosCliente("rs", "confirmação da senha"), senha))
+    {
+        enviarDadosCliente("rs", "# FALHA [SENHAS INCOMPATÍVEIS] - As senhas não coincidem");
         return 0;
     }
 

@@ -46,13 +46,13 @@
 int socketDescritor;       //Variável que guarda o descritor do socket
 char msgServidor[MAX_MSG]; //Mensagem que será recebida, vinda do servidor
 
-struct Usuario u; //Declaração da estrutura do usuário
+// struct Usuario u; //Declaração da estrutura do usuário
 
 /*Declaração das funções*/
 
 short int autenticar();
 void cadastrarUsuario();
-void limparEstruturaUsuario();
+// void limparEstruturaUsuario();
 void imprimirDecoracao();
 void pausarPrograma();
 void finalizarPrograma();
@@ -64,13 +64,14 @@ void finalizarConexao();
 /**
  * Estrutura para organização dos dados do usuário
  */
-struct Usuario
-{
-    char nome[MAX_DADOS];                  //Guarda o nome do usuário (uma palavra)
-    char sobrenome[MAX_DADOS];             //Guarda o sobrenome do usuário (uma palavra)
-    char identificador[MAX_IDENTIFICADOR]; //Guarda o identificador/login do usuário
-    char senha[MAX_SENHA];                 //Guarda a senha do usuário
-};
+// struct Usuario
+// {
+//     char nome[MAX_DADOS];                  //Guarda o nome do usuário (uma palavra)
+//     char sobrenome[MAX_DADOS];             //Guarda o sobrenome do usuário (uma palavra)
+//     char email[MAX_DADOS];                 //Guarda o e-mail do usuário
+//     char identificador[MAX_IDENTIFICADOR]; //Guarda o identificador/login do usuário
+//     char senha[MAX_SENHA];                 //Guarda a senha do usuário
+// };
 
 /**
  * Concatena o id de sincronização à mensagem e escreve no socket a ser lido pelo servidor
@@ -83,8 +84,10 @@ void enviarDadosServidor(char *idSincronia, char *dadosCliente)
     sprintf(msgCliente, "%s/%s", idSincronia, dadosCliente); //Insere o id de sincronização e dados em formato específico na mensagem
 
     //Verificar o tamanho da string a ser enviada
-    if(strlen(msgCliente) > MAX_MSG){
+    if (strlen(msgCliente) > MAX_MSG)
+    {
         printf("# ERRO FATAL - Os dados que pretende enviar ao servidor excederam o limite de caracteres, envio cancelado.\n");
+        //### - Ao invéz de finalizar o programa, solicitar que o usuário informe novamente o dado e validar o tamanho.
         finalizarConexao();
         finalizarPrograma();
     }
@@ -231,7 +234,7 @@ int main()
             if (autenticar())
             {
                 printf("%s", receberDadosServidor("du"));
-                limparEstruturaUsuario();
+                // limparEstruturaUsuario();
             }
             break;
         case 2: //Cadastro
@@ -272,7 +275,7 @@ void cadastrarUsuario()
         strcpy(msgServidor, receberDadosServidor("rp"));
     } while (msgServidor[0] == '#');
     //Se sair do loop é porque a string é válida e pode ser copiada para a variável correta que irá guardar
-    strcpy(u.nome, entradaTemp);
+    // strcpy(u.nome, entradaTemp);
     //Limpar a variável temporária para receber a próxima entrada
     memset(&entradaTemp[0], 0, sizeof(entradaTemp));
 
@@ -287,7 +290,20 @@ void cadastrarUsuario()
         enviarDadosServidor("ru", entradaTemp);
         strcpy(msgServidor, receberDadosServidor("ru"));
     } while (msgServidor[0] == '#');
-    strcpy(u.sobrenome, entradaTemp);
+    // strcpy(u.sobrenome, entradaTemp);
+    memset(&entradaTemp[0], 0, sizeof(entradaTemp));
+
+    //Solicita o e-mail do usuário
+    memset(&msgServidor[0], 0, sizeof(msgServidor));
+    printf("\n> Informe seu e-mail: ");
+    do
+    {
+        puts(msgServidor);
+        setbuf(stdin, NULL);
+        scanf("%[^\n]", entradaTemp);
+        enviarDadosServidor("re", entradaTemp);
+        strcpy(msgServidor, receberDadosServidor("re"));
+    } while (msgServidor[0] == '#');
     memset(&entradaTemp[0], 0, sizeof(entradaTemp));
 
     //Solicita que o usuário crie um identificador
@@ -301,7 +317,7 @@ void cadastrarUsuario()
         enviarDadosServidor("ri", entradaTemp);
         strcpy(msgServidor, receberDadosServidor("ri"));
     } while (msgServidor[0] == '#');
-    strcpy(u.identificador, entradaTemp);
+    // strcpy(u.identificador, entradaTemp);
     memset(&entradaTemp[0], 0, sizeof(entradaTemp));
 
     //Solicita o usuário crie uma senha
@@ -314,11 +330,18 @@ void cadastrarUsuario()
         strcpy(entradaTemp, getpass("> Crie uma senha: "));
         enviarDadosServidor("rs", entradaTemp);
         strcpy(msgServidor, receberDadosServidor("rs"));
+        //Confirmação de senha
+        if (msgServidor[0] == '*')
+        {
+            strcpy(entradaTemp, getpass("\n> Confirme a senha: "));
+            enviarDadosServidor("rs", entradaTemp);
+            strcpy(msgServidor, receberDadosServidor("rs"));
+        }
     } while (msgServidor[0] == '#');
-    strcpy(u.senha, entradaTemp);
+    // strcpy(u.senha, entradaTemp);
     memset(&entradaTemp[0], 0, sizeof(entradaTemp));
 
-    limparEstruturaUsuario();
+    // limparEstruturaUsuario();
     puts(receberDadosServidor("rf"));
 }
 
@@ -330,30 +353,39 @@ void cadastrarUsuario()
  */
 short int autenticar()
 {
+    char identificador[MAX_IDENTIFICADOR];
+    char senha[MAX_SENHA];
+    int repetir = 0;
+
     do
     {
         /*Coleta do login e senha para autenticação*/
         printf("\n> Informe suas credenciais:\n# LOGIN: ");
-        setbuf(stdin, NULL);              //Limpa o buffer de entrada par evitar lixo
-        scanf("%[^\n]", u.identificador); //Realiza a leitura até o usuário pressionar ENTER
-        enviarDadosServidor("li", u.identificador);
-        strcpy(u.senha, getpass("# SENHA: ")); //Lê a senha com ECHO do console desativado e copia o valor lido para a variável u.senha, do usuário
-        enviarDadosServidor("ls", u.senha);
+        setbuf(stdin, NULL);            //Limpa o buffer de entrada par evitar lixo
+        scanf("%[^\n]", identificador); //Realiza a leitura até o usuário pressionar ENTER
+        enviarDadosServidor("li", identificador);
+        strcpy(senha, getpass("# SENHA: ")); //Lê a senha com ECHO do console desativado e copia o valor lido para a variável u.senha, do usuário
+        enviarDadosServidor("ls", senha);
 
         strcpy(msgServidor, receberDadosServidor("au"));
         puts(msgServidor);
         if (msgServidor[0] == '#')
         {
-            puts("\n<?> Voltar ao menu principal? [s/n]: ");
-            setbuf(stdin, NULL);
-            if (getchar() == 's')
+            puts("\n<?> Tentar novamente? [1]Sim / [0]Não:");
+            while (scanf("%d", &repetir) != 1)
+            {
+                puts("# Digite [1] para autenticar novamente e [0] para voltar para o menu inicial: ");
+                setbuf(stdin, NULL);
+            }
+            if (repetir == 1)
             {
                 enviarDadosServidor("cm", "1");
-                setbuf(stdin, NULL);
+            }
+            else
+            {
+                enviarDadosServidor("cm", "0");
                 return 0;
             }
-            getchar();
-            enviarDadosServidor("cm", "0");
         }
         else if (msgServidor[0] == '>')
         {
@@ -373,13 +405,14 @@ short int autenticar()
 /**
  * Zera os dados da estrutura do usuário para reutilização
  */
-void limparEstruturaUsuario()
-{
-    memset(&u.nome[0], 0, sizeof(u.nome));
-    memset(&u.sobrenome[0], 0, sizeof(u.sobrenome));
-    memset(&u.identificador[0], 0, sizeof(u.identificador));
-    memset(&u.senha[0], 0, sizeof(u.senha));
-}
+// void limparEstruturaUsuario()
+// {
+//     memset(&u.nome[0], 0, sizeof(u.nome));
+//     memset(&u.sobrenome[0], 0, sizeof(u.sobrenome));
+//     memset(&u.email[0], 0, sizeof(u.email));
+//     memset(&u.identificador[0], 0, sizeof(u.identificador));
+//     memset(&u.senha[0], 0, sizeof(u.senha));
+// }
 
 /**
  * Apenas imprime as linhas de separação
@@ -411,7 +444,7 @@ void finalizarPrograma()
 {
     imprimirDecoracao();
     setbuf(stdin, NULL);
-    limparEstruturaUsuario();
+    // limparEstruturaUsuario();
     printf("\n# SISTEMA FINALIZADO.\n");
     exit(0);
 }
