@@ -11,6 +11,8 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
+//Tamanho definido do salt
+#define SALT_SIZE 16
 //Valor grande para ser utilizado como tamanho em algumas strings
 #define MAX 2048
 //Tamanho máximo das strings padrão de dados comuns (contando com o último caractere NULL)
@@ -46,13 +48,13 @@
 int socketDescritor;       //Variável que guarda o descritor do socket
 char msgServidor[MAX_MSG]; //Mensagem que será recebida, vinda do servidor
 
-// struct Usuario u; //Declaração da estrutura do usuário
+struct Usuario u; //Declaração da estrutura do usuário
 
 /*Declaração das funções*/
 
 short int autenticar();
 void cadastrarUsuario();
-// void limparEstruturaUsuario();
+void limparEstruturaUsuario();
 void imprimirDecoracao();
 void pausarPrograma();
 void finalizarPrograma();
@@ -60,18 +62,134 @@ void fecharArquivo();
 void enviarDadosServidor(char *idSincronia, char *dadosCliente);
 char *receberDadosServidor();
 void finalizarConexao();
+void areaLogada();
 
 /**
  * Estrutura para organização dos dados do usuário
  */
-// struct Usuario
-// {
-//     char nome[MAX_DADOS];                  //Guarda o nome do usuário (uma palavra)
-//     char sobrenome[MAX_DADOS];             //Guarda o sobrenome do usuário (uma palavra)
-//     char email[MAX_DADOS];                 //Guarda o e-mail do usuário
-//     char identificador[MAX_IDENTIFICADOR]; //Guarda o identificador/login do usuário
-//     char senha[MAX_SENHA];                 //Guarda a senha do usuário
-// };
+struct Usuario
+{
+    //### Ver quais não são usados para eliminar
+    int codigo;                            //Mantém o código (ID do arquivo de dados) do usuário
+    char nome[MAX_DADOS];                  //Guarda o nome do usuário (uma palavra)
+    char sobrenome[MAX_DADOS];             //Guarda o sobrenome do usuário (uma palavra)
+    char email[MAX_DADOS];                 //Guarda o e-mail do usuário
+    char identificador[MAX_IDENTIFICADOR]; //Guarda o identificador/login do usuário
+    char salt[SALT_SIZE + 1];              //Guarda o salt aleatório gerado
+    char senha[MAX_SENHA];                 //Guarda a senha do usuário
+    char *senhaCriptografada;              //Ponteiro para guardar o valor da senha criptografada, precisa ser ponteiro para receber o retorno da função crypt
+    char linhaUsuario[MAX];                //Essa string é utilizada para encontrar a linha do usuário no arquivo
+};
+
+/**
+ * Função principal
+ */
+int main()
+{
+    setlocale(LC_ALL, "Portuguese"); //Permite a utilização de acentos e caracteres do português nas impressões
+
+    /******* CONFIGURAÇÃO DO SOCKET E CONEXÃO *******/
+    puts("> INICIANDO CLIENTE...");
+    pausarPrograma();
+    system("clear");
+
+    struct sockaddr_in servidor; //Estrutura que guarda dados do servidor que irá se conectar
+
+    //Cria o socket do cliente
+    if ((socketDescritor = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+    {
+        perror("# ERRO - Criação do socket falhou:");
+        finalizarPrograma();
+    }
+    printf("> Socket do cliente criado com descritor: %d\n", socketDescritor);
+
+    //Atribuindo informações das configurações do servidor, na sua estrutura
+    servidor.sin_addr.s_addr = inet_addr(ENDERECO_SERVIDOR); //Endereço IP
+    servidor.sin_family = AF_INET;                           //Para comunicação IPV4
+    servidor.sin_port = htons(PORTA);                        //Porta de conexão do servidor
+
+    //Conecta no servidor
+    if (connect(socketDescritor, (struct sockaddr *)&servidor, sizeof(servidor)) == -1)
+    {
+        perror("# ERRO - Não foi possível conectar no servidor");
+        finalizarPrograma();
+    }
+    /******* FIM-CONFIGURAÇÃO DO SOCKET E CONEXÃO *******/
+
+    imprimirDecoracao();
+    printf("\n\t\t>> CONECTADO AO SERVIDOR <<\n");
+    int operacao = 0; //Recebe um número que o usuário digitar para escolher a opção do menu
+    char operacaoString[3];
+
+    //Loop do menu de opções
+    do
+    {
+        pausarPrograma();
+        operacao = '\0'; //Limpar a variável para evitar lixo de memória nas repetições
+
+        system("cls || clear");
+        imprimirDecoracao();
+        printf("\n\t\t>> MENU DE OPERAÇÕES <<\n");
+        printf("\n> Informe um número para escolher uma opção e pressione ENTER:");
+        printf("\n[1] Login");
+        printf("\n[2] Cadastro");
+        printf("\n[3] Ver política de identificadores e senhas");
+        printf("\n[0] Encerrar programa");
+        imprimirDecoracao();
+        printf("\n> Informe o número: ");
+
+        setbuf(stdin, NULL);
+        //Valida a entrada que o usuário digitou
+        while (scanf("%d", &operacao) != 1)
+        {
+            printf("\n# FALHA - Ocorreu um erro na leitura do valor informado.\n> Tente novamente: ");
+            setbuf(stdin, NULL);
+        };
+
+        sprintf(operacaoString, "%d", operacao);
+        enviarDadosServidor("op", operacaoString);
+
+        system("cls || clear");
+
+        if (operacao == 0)
+        {
+            finalizarConexao();
+            finalizarPrograma();
+        }
+
+        //Escolhe a operação conforme o valor que o usuário digitou
+        switch (operacao)
+        {
+        case 1: //Login
+            imprimirDecoracao();
+            printf("\n\t\t>> AUTENTICAÇÃO <<\n");
+            imprimirDecoracao();
+            if (autenticar())
+            {
+                areaLogada();
+                limparEstruturaUsuario();
+            }
+            break;
+        case 2: //Cadastro
+            imprimirDecoracao();
+            printf("\n\t\t>> CADASTRO <<\n");
+            imprimirDecoracao();
+            cadastrarUsuario();
+            break;
+        case 3: //Ver política
+            imprimirDecoracao();
+            printf("\n\t>> POLÍTICA DE IDENTIFICADORES E SENHAS <<\n");
+            imprimirDecoracao();
+            puts(receberDadosServidor("pt"));
+            break;
+        default:
+            printf("\n# FALHA [OPÇÃO INVÁLIDA] - Você digitou uma opção inválida, tente novamente!\n");
+            break;
+        }
+    } while (1);
+
+    return EXIT_SUCCESS;
+}
 
 /**
  * Concatena o id de sincronização à mensagem e escreve no socket a ser lido pelo servidor
@@ -140,6 +258,7 @@ char *receberDadosServidor(char *idSincronia)
 void finalizarConexao()
 {
     imprimirDecoracao();
+
     //Fecha o socket
     if (close(socketDescritor))
     {
@@ -147,109 +266,6 @@ void finalizarConexao()
         return;
     }
     puts("> INFO - Você foi desconectado.");
-}
-
-/**
- * Função principal
- */
-int main()
-{
-    setlocale(LC_ALL, "Portuguese"); //Permite a utilização de acentos e caracteres do português nas impressões
-
-    /******* CONFIGURAÇÃO DO SOCKET E CONEXÃO *******/
-    puts("> INICIANDO CLIENTE...");
-    pausarPrograma();
-    system("clear");
-
-    struct sockaddr_in servidor; //Estrutura que guarda dados do servidor que irá se conectar
-
-    //Cria o socket do cliente
-    if ((socketDescritor = socket(AF_INET, SOCK_STREAM, 0)) == -1)
-    {
-        perror("# ERRO - Criação do socket falhou:");
-        finalizarPrograma();
-    }
-    printf("> Socket do cliente criado com descritor: %d\n", socketDescritor);
-
-    //Atribuindo informações das configurações do servidor, na sua estrutura
-    servidor.sin_addr.s_addr = inet_addr(ENDERECO_SERVIDOR); //Endereço IP
-    servidor.sin_family = AF_INET;                           //Para comunicação IPV4
-    servidor.sin_port = htons(PORTA);                        //Porta de conexão do servidor
-
-    //Conecta no servidor
-    if (connect(socketDescritor, (struct sockaddr *)&servidor, sizeof(servidor)) == -1)
-    {
-        perror("# ERRO - Não foi possível conectar no servidor");
-        finalizarPrograma();
-    }
-    /******* FIM-CONFIGURAÇÃO DO SOCKET E CONEXÃO *******/
-
-    imprimirDecoracao();
-    printf("\n\t\t>> CONECTADO AO SERVIDOR <<\n");
-    int operacao = 0; //Recebe um número que o usuário digitar para escolher a opção do menu
-    char operacaoString[3];
-
-    //Loop do menu de opções
-    do
-    {
-        pausarPrograma();
-        operacao = '\0'; //Limpar a variável para evitar lixo de memória nas repetições
-
-        system("cls || clear");
-        imprimirDecoracao();
-        printf("\n\t\t>> MENU DE OPERAÇÕES <<\n");
-        printf("\n> Informe um número para escolher uma opção e pressione ENTER:");
-        printf("\n[1] Login");
-        printf("\n[2] Cadastro");
-        printf("\n[0] Encerrar programa");
-        imprimirDecoracao();
-        printf("\n> Informe o número: ");
-
-        setbuf(stdin, NULL);
-        //Valida a entrada que o usuário digitou
-        while (scanf("%d", &operacao) != 1)
-        {
-            printf("\n# FALHA - Ocorreu um erro na leitura do valor informado.\n> Tente novamente: ");
-            setbuf(stdin, NULL);
-        };
-
-        sprintf(operacaoString, "%d", operacao);
-        enviarDadosServidor("op", operacaoString);
-
-        system("cls || clear");
-
-        if (operacao == 0)
-        {
-            finalizarConexao();
-            finalizarPrograma();
-        }
-
-        //Escolhe a operação conforme o valor que o usuário digitou
-        switch (operacao)
-        {
-        case 1: //Login
-            imprimirDecoracao();
-            printf("\n\t\t>> AUTENTICAÇÃO <<\n\n");
-            imprimirDecoracao();
-            if (autenticar())
-            {
-                printf("%s", receberDadosServidor("du"));
-                // limparEstruturaUsuario();
-            }
-            break;
-        case 2: //Cadastro
-            imprimirDecoracao();
-            printf("\n\t\t>> CADASTRO <<\n\n");
-            imprimirDecoracao();
-            cadastrarUsuario();
-            break;
-        default:
-            printf("\n# FALHA [OPÇÃO INVÁLIDA] - Você digitou uma opção inválida, tente novamente!\n");
-            break;
-        }
-    } while (1);
-
-    return EXIT_SUCCESS;
 }
 
 /**
@@ -341,7 +357,7 @@ void cadastrarUsuario()
     // strcpy(u.senha, entradaTemp);
     memset(&entradaTemp[0], 0, sizeof(entradaTemp));
 
-    // limparEstruturaUsuario();
+    limparEstruturaUsuario();
     puts(receberDadosServidor("rf"));
 }
 
@@ -353,24 +369,23 @@ void cadastrarUsuario()
  */
 short int autenticar()
 {
-    char identificador[MAX_IDENTIFICADOR];
-    char senha[MAX_SENHA];
     int repetir = 0;
-
+    char *msgServidor = malloc(MAX_MSG);
     do
     {
         /*Coleta do login e senha para autenticação*/
         printf("\n> Informe suas credenciais:\n# LOGIN: ");
-        setbuf(stdin, NULL);            //Limpa o buffer de entrada par evitar lixo
-        scanf("%[^\n]", identificador); //Realiza a leitura até o usuário pressionar ENTER
-        enviarDadosServidor("li", identificador);
-        strcpy(senha, getpass("# SENHA: ")); //Lê a senha com ECHO do console desativado e copia o valor lido para a variável u.senha, do usuário
-        enviarDadosServidor("ls", senha);
+        setbuf(stdin, NULL);              //Limpa o buffer de entrada par evitar lixo
+        scanf("%[^\n]", u.identificador); //Realiza a leitura até o usuário pressionar ENTER
+        enviarDadosServidor("li", u.identificador);
+        strcpy(u.senha, getpass("# SENHA: ")); //Lê a senha com ECHO do console desativado e copia o valor lido para a variável u.senha, do usuário
+        enviarDadosServidor("ls", u.senha);
+        imprimirDecoracao();
 
         strcpy(msgServidor, receberDadosServidor("au"));
-        puts(msgServidor);
         if (msgServidor[0] == '#')
         {
+            puts(msgServidor);
             puts("\n<?> Tentar novamente? [1]Sim / [0]Não:");
             while (scanf("%d", &repetir) != 1)
             {
@@ -389,6 +404,14 @@ short int autenticar()
         }
         else if (msgServidor[0] == '>')
         {
+            puts("\n> SUCESSO - Login realizado!");
+            if (sscanf(msgServidor, ">%d|%[^|]|%[^|]|%[^|]|%[^|]|%[^|]|%[^\n]", &u.codigo, u.identificador, u.salt, &u.senhaCriptografada, u.nome, u.sobrenome, u.email) != 7)
+            {
+                printf("\n# FALHA: Houve um problema ao receber os dados do servidor\n");
+                return 0;
+            }
+            strcpy(u.linhaUsuario, msgServidor);
+            // printf("§ %s", u.linhaUsuario);
             return 1;
         }
         else
@@ -403,16 +426,102 @@ short int autenticar()
 }
 
 /**
- * Zera os dados da estrutura do usuário para reutilização
+ * Opções para o usuário autenticado
  */
-// void limparEstruturaUsuario()
-// {
-//     memset(&u.nome[0], 0, sizeof(u.nome));
-//     memset(&u.sobrenome[0], 0, sizeof(u.sobrenome));
-//     memset(&u.email[0], 0, sizeof(u.email));
-//     memset(&u.identificador[0], 0, sizeof(u.identificador));
-//     memset(&u.senha[0], 0, sizeof(u.senha));
-// }
+void areaLogada()
+{
+    int operacao = 0; //Recebe o valor da entrada do usuário para escolher a operação
+    char operacaoString[3];
+    imprimirDecoracao();
+    printf("\n\t\tBEM-VINDO %s!\n", u.nome);
+
+    //Loop do menu de opções do usuário logado
+    do
+    {
+        pausarPrograma();
+        operacao = '\0'; //Limpar a variável para evitar lixo de memória nas repetições
+
+        system("cls || clear");
+        imprimirDecoracao();
+        printf("\t\t> MENU DE OPERAÇÕES <\n\n*Autenticado como %s", u.nome);
+        imprimirDecoracao();
+        printf("\n> Informe um número para escolher uma opção e pressione ENTER:");
+        printf("\n___________________________________");
+        printf("\n[0] ENCERRAR PROGRAMA");
+        printf("\n[1] LOGOUT");
+        printf("\n[2] EXCLUIR MEU CADASTRO");
+        printf("\n___________________________________");
+        printf("\n[3] Ver meus dados");
+        printf("\n[4] Ver política de identificadores e senhas");
+        imprimirDecoracao();
+        printf("\n> Informe o número: ");
+
+        setbuf(stdin, NULL);
+        //Valida a entrada que o usuário digitou
+        while (scanf("%d", &operacao) != 1)
+        {
+            printf("\n# FALHA - Ocorreu um erro na leitura do valor informado.\n> Tente novamente: ");
+            setbuf(stdin, NULL);
+        };
+
+        sprintf(operacaoString, "%d", operacao);
+        enviarDadosServidor("ap", operacaoString);
+
+        system("cls || clear");
+
+        if (operacao == 0)
+        {
+            limparEstruturaUsuario();
+            finalizarConexao();
+            finalizarPrograma();
+        }
+
+        //Escolhe a operação conforme o valor que o usuário digitou
+        switch (operacao)
+        {
+        case 1: //Logout
+            system("clear || cls");
+            printf("\n# LOGOUT - Você saiu\n");
+            imprimirDecoracao();
+            return;
+        case 2: //Excluir Cadastro
+            imprimirDecoracao();
+            printf("\n\t\t>> EXCLUIR CADASTRO <<\n");
+            imprimirDecoracao();
+            printf("\n# AVISO - Tem certeza que deseja excluir seu cadastro? Essa ação não pode ser desfeita! [s/n]\n> ");
+            setbuf(stdin, NULL);
+            if (getchar() != 's')
+            {
+                setbuf(stdin, NULL);
+                getchar();
+                enviarDadosServidor("cd", "0");
+                puts("\n# OPERAÇÃO CANCELADA\n");
+                break;
+            }
+            setbuf(stdin, NULL);
+            getchar();
+            enviarDadosServidor("cd", "1");
+            puts(receberDadosServidor("dl"));
+            limparEstruturaUsuario();
+            return;
+        case 3: //Ver dados do usuário
+            imprimirDecoracao();
+            printf("\n\t\t>> MEUS DADOS <<\n");
+            puts(receberDadosServidor("du"));
+            imprimirDecoracao();
+            break;
+        case 4: //Cadastro
+            imprimirDecoracao();
+            printf("\n\t>> VER POLÍTICA DE IDENTIFICADORES E SENHAS <<\n");
+            imprimirDecoracao();
+            puts(receberDadosServidor("pt"));
+            break;
+        default:
+            puts("\n# FALHA [OPÇÃO INVÁLIDA] - Você digitou uma opção inválida, tente novamente!\n");
+            break;
+        }
+    } while (1);
+}
 
 /**
  * Apenas imprime as linhas de separação
@@ -438,13 +547,29 @@ void pausarPrograma()
 }
 
 /**
+ * ### Zera os dados da estrutura do usuário para reutilização
+ */
+void limparEstruturaUsuario()
+{
+    memset(&u.nome[0], 0, sizeof(u.nome));
+    memset(&u.sobrenome[0], 0, sizeof(u.sobrenome));
+    memset(&u.email[0], 0, sizeof(u.email));
+    memset(&u.identificador[0], 0, sizeof(u.identificador));
+    memset(&u.salt[0], 0, sizeof(u.salt));
+    memset(&u.senha[0], 0, sizeof(u.senha));
+    // memset(&u.senhaCriptografada[0], 0, sizeof(u.senhaCriptografada));
+    memset(&u.linhaUsuario[0], 0, sizeof(u.linhaUsuario));
+    u.codigo = '0';
+}
+
+/**
  * Limpa a estrutura com os dados do usuário e encerra o programa
  */
 void finalizarPrograma()
 {
     imprimirDecoracao();
     setbuf(stdin, NULL);
-    // limparEstruturaUsuario();
-    printf("\n# SISTEMA FINALIZADO.\n");
+    setbuf(stdout, NULL);
+    printf("# SISTEMA FINALIZADO.\n");
     exit(0);
 }
