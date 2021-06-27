@@ -21,8 +21,6 @@
 #define MAX_IDENTIFICADOR 16
 //Tamanho máximo da string da senha (contando com o último caractere NULL)
 #define MAX_SENHA 31
-//Tamanho da mensagem trocada entre cliente/servidor
-#define MAX_MSG 1024
 //Porta de conexão onde o servidor está ouvindo
 #define PORTA 3344
 //Endereço IP que se encontra o servidor
@@ -45,8 +43,8 @@
  **/
 
 //Variáveis globais da conexão
-int socketDescritor;       //Variável que guarda o descritor do socket
-char msgServidor[MAX_MSG]; //Mensagem que será recebida, vinda do servidor
+int socketDescritor; //Variável que guarda o descritor do socket
+int maxMsg = 1024;   //Tamanho da mensagem trocada entre cliente/servidor, possui um valor default, mas poderá ser definida de acordo com o tamanho que o servidor enviar após o cliente conectar
 
 struct Usuario u; //Declaração da estrutura do usuário
 
@@ -98,7 +96,7 @@ int main()
     //Cria o socket do cliente
     if ((socketDescritor = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
-        perror("# ERRO - Criação do socket falhou:");
+        perror("# ERRO FATAL - Criação do socket falhou:");
         finalizarPrograma();
     }
     // printf("§ Socket do cliente criado com descritor: %d\n", socketDescritor);
@@ -111,7 +109,7 @@ int main()
     //Conecta no servidor
     if (connect(socketDescritor, (struct sockaddr *)&servidor, sizeof(servidor)) == -1)
     {
-        perror("# ERRO - Não foi possível conectar no servidor");
+        perror("# ERRO FATAL - Não foi possível conectar no servidor");
         finalizarPrograma();
     }
     /******* FIM-CONFIGURAÇÃO DO SOCKET E CONEXÃO *******/
@@ -120,6 +118,15 @@ int main()
     printf("\n\t\t>> CONECTADO AO SERVIDOR COM SUCESSO <<\n");
     int operacao = 0; //Recebe um número que o usuário digitar para escolher a opção do menu
     char operacaoString[3];
+
+    //Receber tamanho máximo em bytes da comunicação, definido pelo servidor
+    int msgServidor = atoi(receberDadosServidor("mx"));
+    if (msgServidor < 4)
+    {
+        printf("# ERRO - Não foi possível identificar o comprimento máximo aceitável de leitura e escrita das mensagens pelo servidor, o tamanho máximo considerado será de %d.\n", maxMsg);
+    }else{
+        maxMsg = msgServidor;
+    }
 
     //Loop do menu de opções
     do
@@ -199,12 +206,12 @@ int main()
  */
 void enviarDadosServidor(char *idSincronia, char *dadosCliente)
 {
-    char *msgCliente = malloc(MAX_MSG); //Armazena a mensagem a ser enviada contendo id e dados
+    char *msgCliente = malloc(maxMsg); //Armazena a mensagem a ser enviada contendo id e dados
 
     //Verificar o tamanho da string a ser enviada
-    while (strlen(dadosCliente) > (MAX_MSG-strlen(idSincronia)-1))
+    while (strlen(dadosCliente) > (maxMsg - strlen(idSincronia) - 1))
     {
-        printf("\n# ERRO - Os dados que pretende enviar ao servidor (%d caracteres), excederam o limite de %d caracteres, envio cancelado.\n# INFO - Digite novamente o dado que deseja enviar: ", strlen(dadosCliente), MAX_MSG-strlen(idSincronia)-1);
+        printf("\n# ERRO - Os dados que pretende enviar ao servidor (%d caracteres), excederam o limite de %d caracteres, envio cancelado.\n# INFO - Digite novamente o dado que deseja enviar: ", strlen(dadosCliente), maxMsg - strlen(idSincronia) - 1);
         setbuf(stdin, NULL);
         scanf("%[^\n]", dadosCliente);
     }
@@ -229,10 +236,10 @@ void enviarDadosServidor(char *idSincronia, char *dadosCliente)
 char *receberDadosServidor(char *idSincronia)
 {
     int tamanho; //Guarda o tamanho da mensagem recebida pelo servidor
-    char *msgServidorLocal = malloc(MAX_MSG);
+    char *msgServidorLocal = malloc(maxMsg);
 
     //Lê resposta do servidor e valida se não houveram erros
-    if ((tamanho = read(socketDescritor, msgServidorLocal, MAX_MSG)) < 0)
+    if ((tamanho = read(socketDescritor, msgServidorLocal, maxMsg)) < 0)
     {
         perror("# ERRO - Falha ao receber resposta");
         finalizarConexao();
@@ -240,7 +247,7 @@ char *receberDadosServidor(char *idSincronia)
     }
     msgServidorLocal[tamanho] = '\0'; //Adiciona NULL no final da string
 
-    // printf("\n§ msgCliente Recebida: %s\n", msgServidorLocal);
+    printf("\n§ msgCliente Recebida: %s\n", msgServidorLocal);
 
     //Separa o identificador de sincronização e compara se era esse identificador que o programa estava esperando
     if (strcmp(strsep(&msgServidorLocal, "/"), idSincronia))
@@ -277,6 +284,7 @@ void cadastrarUsuario()
     printf("\n> Forneça as informações necessárias para efetuar o cadastro:\n");
 
     char entradaTemp[MAX];                           //Variável para fazer a entrada de valores digitados e realizar a validação antes de atribuir à variável correta
+    char msgServidor[maxMsg];                        //Mensagem que será recebida, vinda do servidor
     memset(&entradaTemp[0], 0, sizeof(entradaTemp)); //Limpando a variável para garantir que não entre lixo de memória
 
     //Solicita o nome do usuário
@@ -371,7 +379,7 @@ void cadastrarUsuario()
 short int autenticar()
 {
     int repetir = 0;
-    char *msgServidor = malloc(MAX_MSG);
+    char *msgServidor = malloc(maxMsg);
     do
     {
         /*Coleta do login e senha para autenticação*/

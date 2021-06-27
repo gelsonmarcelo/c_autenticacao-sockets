@@ -47,7 +47,7 @@
 FILE *ponteiroArquivos = NULL;        //Ponteiro para manipular o arquivo
 char temp[MAX];                       //Variável temporária para gravação de valores que não serão utilizados mas precisam ser colocados em alguma variável
 char arquivoUsuarios[] = "dados.txt"; //String com nome do arquivo de dados
-int conexao; //Guarda o retorno de accept, um arquivo descritor do socket conectado
+int conexao;                          //Guarda o retorno de accept, um arquivo descritor do socket conectado
 
 struct Usuario u; //Declaração da estrutura do usuário
 
@@ -99,38 +99,38 @@ struct Usuario
  */
 int main()
 {
-    setlocale(LC_ALL, "Portuguese"); //Permite a utilização de acentos e caracteres do português nas impressões
+    setlocale(LC_ALL, "Portuguese");   //Permite a utilização de acentos e caracteres do português nas impressões do console
+    char maximoMsg[sizeof(int)];       //Comprimento máximo da troca de mensagens entre cliente/servidor em formato string para ser enviado para o cliente que se conectar
+    sprintf(maximoMsg, "%d", MAX_MSG); //Convertendo valor do comprimeiro máximo das mensagens e adicionando na string
+    int operacao;                      //Recebe um número que o cliente enviou para escolher a operação do menu
+    short int encerrarConexao;         //Flag para determinar se o usuário solicitou encerrar o programa (cliente) na área logada, o que leva a encerrar a conexão por parte do servidor
 
-    //Verifica arquivos necessários para o programa iniciar
+    //Verifica se é possível manipular o arquivo de dados dos usuários
     if (testarArquivo(arquivoUsuarios, ""))
     {
         printf("# ERRO FATAL - O arquivo de dados não pode ser manipulado, o servidor não pode ser iniciado.\n");
         finalizarPrograma();
     }
 
-    /******* CONFIGURAÇÃO DO SOCKET E CONEXÃO *******/
-    int socketDescritor;                  //Descritor do socket
-    int socketSize;                       //Guarda o tamanho da estrutura do socket
-    struct sockaddr_in servidor, cliente; //Estruturas de cliente e servidor, para guardar seus dados
-    char *clienteIp;                      //Para pegar o IP do cliente
-    int clientePorta;                     //Para pegar porta do cliente
+    /******* CONFIGURAÇÕES DO SOCKET *******/
+    int socketDescritor;                       //Descritor do socket
+    struct sockaddr_in servidor, cliente;      //Estruturas de cliente e servidor, para configuração
+    socklen_t clienteLenght = sizeof(cliente); //Salva comprimento da struct do cliente
 
-    //Cria um socket
-    socketDescritor = socket(AF_INET, SOCK_STREAM, 0);
-    if (socketDescritor == -1)
+    //Cria um socket e valida
+    if ((socketDescritor = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
         perror("# ERRO FATAL - Falha ao criar socket");
         finalizarPrograma();
     }
-
     // printf("§ Socket do servidor criado com descritor: %d\n", socketDescritor);
 
-    //Define as propriedades da struct do socket
+    // ### - Define as propriedades da struct do socket
     servidor.sin_family = AF_INET;
     servidor.sin_addr.s_addr = INADDR_ANY; // Obtem IP do Sistema Operacional
     servidor.sin_port = htons(PORTA);
 
-    //Trata o erro de porta já está em uso
+    // ### - Trata o erro de porta já está em uso
     int sim = 1;
     if (setsockopt(socketDescritor, SOL_SOCKET, SO_REUSEADDR, &sim, sizeof(int)) == -1)
     {
@@ -138,7 +138,7 @@ int main()
         finalizarPrograma();
     }
 
-    //Associa o socket à porta
+    // ### - Associa o socket à porta
     if (bind(socketDescritor, (struct sockaddr *)&servidor, sizeof(servidor)) == -1)
     {
         perror("# ERRO FATAL - Erro ao fazer bind");
@@ -149,73 +149,69 @@ int main()
     pausarPrograma();
     system("clear");
 
-    // Aguarda conexões de clientes
+    //Aguarda conexões de clientes
     if (listen(socketDescritor, 1) == -1)
     {
-        perror("# ERRO FATAL- Erro ao ouvir conexões:");
+        perror("# ERRO FATAL- Erro ao ouvir conexões");
         finalizarPrograma();
     }
-    
+    /******* FIM - CONFIGURAÇÃO DO SOCKET *******/
+    //Loop do recebimento e tratativa das conexões
     do
     {
         imprimirDecoracao();
         puts("> SERVIDOR ONLINE...");
-        printf("> Ouvindo na porta %d", PORTA);
-        //Aceita e trata conexões
+        printf("> Ouvindo na porta %d.", PORTA);
         puts("\n> Aguardando por conexões...");
-        socklen_t clienteLenght = sizeof(cliente);
+
+        //Aceita a solicitação de conexão do cliente
         if ((conexao = accept(socketDescritor, (struct sockaddr *)&cliente, &clienteLenght)) == -1)
         {
             perror("# ERRO FATAL - Falha ao aceitar conexão");
             finalizarPrograma();
         }
-
-        //Obtém IP e porta do cliente
-        clienteIp = inet_ntoa(cliente.sin_addr);
-        clientePorta = ntohs(cliente.sin_port);
-        /******* FIM - CONFIGURAÇÃO DO SOCKET E CONEXÃO *******/
-
         imprimirDecoracao();
-        printf(">> >> CLIENTE CONECTADO >> >>\n");
-        printf("> Cliente IP:PORTA = %s:%d", clienteIp, clientePorta);
+        printf("\n>> >> CLIENTE CONECTADO >> >>\n");
+        printf("> Cliente IP:PORTA = %s:%d\n", inet_ntoa(cliente.sin_addr), ntohs(cliente.sin_port)); //Obtém IP e porta do cliente
+        puts("> Enviando comprimento máximo da troca de mensagens do servidor...");
+        enviarDadosCliente("mx", maximoMsg); //Envia para o cliente que se conectou, o comprimento máximo de leitura/escrita das mensagens pelo servidor
 
-        int operacao = 0; //Recebe um número que o usuário digitar para escolher a opção do menu
-        short int encerrarConexao = 0;
+        operacao = 0;
+        encerrarConexao = 0;
 
         //Loop do menu de operações
         do
         {
             imprimirDecoracao();
             puts("\t> MENU DE OPERAÇÕES: NÃO AUTENTICADO <");
+            //operacao recebe os dados do cliente, sendo convertidos para int, os dados que chegam aqui já foram validados como inteiros pela aplicação cliente
             operacao = atoi(receberDadosCliente("op", "operação do menu"));
 
+            //Usuário solicitou encerrar o cliente (consequentemente a conexão)
             if (operacao == 0)
             {
                 finalizarConexao();
                 break;
             }
 
-            //Escolhe a operação conforme o valor que o usuário digitou
+            imprimirDecoracao();
+            //Escolhe a operação conforme o valor que o usuário informou
             switch (operacao)
             {
-            case 1: //Login
-                imprimirDecoracao();
+            case 1: //Autenticação
                 printf("\t\t>> AUTENTICAÇÃO <<\n");
                 if (autenticar())
                 {
                     encerrarConexao = areaLogada();
-                    limparEstruturaUsuario();
+                    limparEstruturaUsuario(); //Quando o programa chega aqui, saiu da área logada, então o usuário não está mais autenticado
                 }
                 break;
             case 2: //Cadastro
-                imprimirDecoracao();
                 printf("\t\t>> CADASTRO <<\n");
                 cadastrarUsuario();
                 break;
             case 3: //Ver política
-                imprimirDecoracao();
                 printf("\t>> POLÍTICA DE IDENTIFICADORES E SENHAS <<\n");
-                imprimirDecoracao();
                 mostrarPoliticaSenhas();
                 break;
             default:
@@ -223,6 +219,7 @@ int main()
                 break;
             }
 
+            //Se a flag foi ativada é necessário sair do loop pois a conexão do cliente foi encerrada
             if (encerrarConexao)
                 break;
         } while (1);
@@ -242,53 +239,54 @@ int main()
 }
 
 /**
- * Lê dados escritos pelo cliente no socket de comunicação, separa e analisa o id de sincronização e retorna a mensagem recebida
- * @param idSincronia é o identificador que será comparado com a mensagem recebida do cliente, para saber se a mensagem é um dado esperado
- * @param dadosEsperado apenas um breve descritivo para que possa ser acompanhado, no console do servidor, qual dado ele está aguardando
- * @return a mensagem recebida do cliente
+ * Lê a mensagem escrita pelo cliente no socket de comunicação, separa e compara o id de sincronização e retorna a mensagem recebida
+ * @param idSincronia é um identificador com 2 letras, definido em ambas mensagem de envio e recebimento para verificar se a mensagem recebida é a 
+ * informação que o programa esperava, isso define se a aplicação cliente e servidor estão sincronizadas e comunicando de forma adequada
+ * @param dadoEsperado apenas um breve descritivo para que possa ser acompanhado, no console do servidor, qual dado ele está aguardando do cliente
+ * @return a mensagem recebida do cliente sem o id de sincronização
  */
 char *receberDadosCliente(char *idSincronia, char *dadoEsperado)
 {
-    int tamanho; //Guarda o tamanho da mensagem recebida pelo cliente
-    char *msgClienteLocal = malloc(MAX_MSG);
+    int comprimentoMsg;                 //Guarda o comprimeiro da mensagem recebida pelo cliente
+    char *msgCliente = malloc(MAX_MSG); //Guarda a mensagem recebida
 
     printf("> Aguardando: %s...\n", dadoEsperado);
 
-    //Lê dados enviados pelo cliente
-    if ((tamanho = read(conexao, msgClienteLocal, MAX_MSG)) < 0)
+    //Lê dados escritos pelo cliente no socket
+    if ((comprimentoMsg = read(conexao, msgCliente, MAX_MSG)) < 0)
     {
         perror("# ERRO FATAL - Falha ao receber dados do cliente");
         finalizarConexao();
         finalizarPrograma();
     }
+    msgCliente[comprimentoMsg] = '\0'; //Adiciona NULL no final da string recebida
+    // printf("\n§ msgCliente recebida: %s\n", msgCliente);
 
-    msgClienteLocal[tamanho] = '\0'; //Adiciona NULL no final da string recebida
-
-    // printf("\n§ msgCliente Recebida: %s\n", msgClienteLocal);
-
-    //Separa o identificador de sincronização e compara se era esse identificador que o programa estava esperando
-    if (strcmp(strsep(&msgClienteLocal, "/"), idSincronia))
+    //Separa o identificador de sincronização e compara se era essa mensagem que o programa esperava receber
+    if (strcmp(strsep(&msgCliente, "/"), idSincronia))
     {
         //Se não for, houve algum problema na sincronização cliente/servidor e eles não estão comunicando corretamente
         puts("\n# ERRO FATAL - Servidor e cliente não estão sincronizados...");
         finalizarConexao();
         finalizarPrograma();
     }
-    return msgClienteLocal; //Retorna somente a parte da mensagem recebida, após o /
+    return msgCliente; //Retorna somente a parte da mensagem recebida, após o /
 }
 
 /**
  * Escreve uma mensagem no socket a ser lido pelo cliente
- * @param idSincronia é o identificador que será verificado no cliente para saber se a mensagem recebida é um dado esperado
- * @param dadosServidor é a string com dados que o cliente precisa enviar
+ * @param idSincronia é um identificador com 2 letras, definido em ambas mensagem de envio e recebimento para verificar se a mensagem recebida é a 
+ * informação que o programa esperava, isso define se a aplicação cliente e servidor estão sincronizadas e comunicando de forma adequada
+ * @param dadosServidor é a string com dados que o servidor precisa enviar ao cliente
  */
 void enviarDadosCliente(char *idSincronia, char *dadosServidor)
 {
-    char *msgServidor = malloc(MAX_MSG);                       //Armazena a mensagem a ser enviada contendo id e dados
+    char *msgServidor = malloc(MAX_MSG); //Armazena a mensagem a ser enviada contendo id e dados
 
-    //Verificar o tamanho da string a ser enviada
-    if (strlen(msgServidor) > (MAX_MSG-strlen(idSincronia)-1))
+    //Validar o comprimento da string a ser enviada
+    if (strlen(dadosServidor) > (MAX_MSG - strlen(idSincronia) - 1))
     {
+        //Se ultrapassar o comprimento máximo que o cliente pode ler, cancela o envio abortando o programa
         printf("# ERRO FATAL - Os dados que o servidor tentou enviar excederam o limite de caracteres, envio cancelado.\n");
         finalizarConexao();
         finalizarPrograma();
@@ -1006,7 +1004,7 @@ void pausarPrograma()
 }
 
 /**
- * Limpa a estrutura com os dados do usuário e encerra o programa
+ * Encerra o programa
  */
 void finalizarPrograma()
 {
@@ -1018,7 +1016,7 @@ void finalizarPrograma()
 }
 
 /**
- * Zera os dados da estrutura do usuário para reutilização
+ * Zera os dados salvos na estrutura do usuário
  */
 void limparEstruturaUsuario()
 {
