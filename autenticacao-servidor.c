@@ -25,7 +25,7 @@
 #define PARAMETRO_CRYPT "$6$rounds=20000$%s$"
 //Tamanho da mensagem trocada entre cliente/servidor
 #define MAX_MSG 1024
-//Porta de conexão onde o servidor está ouvindo
+//Porta de conexão onde o servidor ouve
 #define PORTA 3344
 
 /**
@@ -44,42 +44,39 @@
  * Não pode conter caracteres que não sejam alfanuméricos, caracteres especiais ou espaço.
  **/
 
-FILE *ponteiroArquivos = NULL;        //Ponteiro para manipular os arquivos
+FILE *ponteiroArquivos = NULL;        //Ponteiro para manipular o arquivo
 char temp[MAX];                       //Variável temporária para gravação de valores que não serão utilizados mas precisam ser colocados em alguma variável
-char arquivoUsuarios[] = "dados.txt"; //String com nome dos arquivo de dados
-
-//Variáveis globais Socket
+char arquivoUsuarios[] = "dados.txt"; //String com nome do arquivo de dados
 int conexao; //Guarda o retorno de accept, um arquivo descritor do socket conectado
 
 struct Usuario u; //Declaração da estrutura do usuário
 
 /*Declaração das funções*/
 
-int pegarProximoId(char *arquivo, char *idSincronia);
+char *receberDadosCliente(char *idSincronia, char *dadoEsperado);
+void enviarDadosCliente(char *idSincronia, char *dadosServidor);
 short int autenticar();
+void cadastrarUsuario();
+void coletarDados();
+int pegarProximoId(char *arquivo, char *idSincronia);
 short int validarStringPadrao(char *string, char *idSincronia);
 short int validarStringEmail(char *string);
 short int validarIdentificador(char *identificador);
 short int validarSenha(char *senha);
-short int excluirDados();
-short int testarArquivo(char *nomeArquivo, char *idSincronia);
 char *alternarCapitalLetras(char *string, int flag);
-void cadastrarUsuario();
 void gerarSalt();
 void criptografarSenha();
-void imprimirDecoracao();
-void coletarDados();
-void pausarPrograma();
-void finalizarPrograma();
+short int testarArquivo(char *nomeArquivo, char *idSincronia);
 void fecharArquivo(FILE *arquivo, char *idSincronia);
-void finalizarConexao();
-char *receberDadosCliente(char *idSincronia, char *dadoEsperado);
-void enviarDadosCliente(char *idSincronia, char *dadosServidor);
-void limparEstruturaUsuario();
 short int areaLogada();
 void verDadosUsuario();
-void mostrarPoliticaSenhas();
 short int excluirUsuario();
+void mostrarPoliticaSenhas();
+void imprimirDecoracao();
+void pausarPrograma();
+void limparEstruturaUsuario();
+void finalizarConexao();
+void finalizarPrograma();
 
 /**
  * Estrutura para organização dos dados do usuário
@@ -107,15 +104,11 @@ int main()
     //Verifica arquivos necessários para o programa iniciar
     if (testarArquivo(arquivoUsuarios, ""))
     {
-        printf("# ERRO FATAL - O arquivo de dados não pode ser manipulado, o programa não pode ser iniciado.\n");
+        printf("# ERRO FATAL - O arquivo de dados não pode ser manipulado, o servidor não pode ser iniciado.\n");
         finalizarPrograma();
     }
 
     /******* CONFIGURAÇÃO DO SOCKET E CONEXÃO *******/
-    puts("> INICIANDO SERVIDOR...");
-    pausarPrograma();
-    system("clear");
-
     int socketDescritor;                  //Descritor do socket
     int socketSize;                       //Guarda o tamanho da estrutura do socket
     struct sockaddr_in servidor, cliente; //Estruturas de cliente e servidor, para guardar seus dados
@@ -130,7 +123,7 @@ int main()
         finalizarPrograma();
     }
 
-    printf("> Socket do servidor criado com descritor: %d\n", socketDescritor);
+    // printf("§ Socket do servidor criado com descritor: %d\n", socketDescritor);
 
     //Define as propriedades da struct do socket
     servidor.sin_family = AF_INET;
@@ -151,17 +144,23 @@ int main()
         perror("# ERRO FATAL - Erro ao fazer bind");
         finalizarPrograma();
     }
+
+    puts("> SERVIDOR INICIADO...");
+    pausarPrograma();
+    system("clear");
+
+    // Aguarda conexões de clientes
+    if (listen(socketDescritor, 1) == -1)
+    {
+        perror("# ERRO FATAL- Erro ao ouvir conexões:");
+        finalizarPrograma();
+    }
+    
     do
     {
         imprimirDecoracao();
-        // Aguarda conexões de clientes
-        if (listen(socketDescritor, 1) == -1)
-        {
-            perror("# ERRO FATAL- Erro ao ouvir conexões:");
-            finalizarPrograma();
-        }
+        puts("> SERVIDOR ONLINE...");
         printf("> Ouvindo na porta %d", PORTA);
-
         //Aceita e trata conexões
         puts("\n> Aguardando por conexões...");
         socklen_t clienteLenght = sizeof(cliente);
@@ -177,7 +176,7 @@ int main()
         /******* FIM - CONFIGURAÇÃO DO SOCKET E CONEXÃO *******/
 
         imprimirDecoracao();
-        printf("\t\t>> CLIENTE CONECTADO <<\n");
+        printf(">> >> CLIENTE CONECTADO >> >>\n");
         printf("> Cliente IP:PORTA = %s:%d", clienteIp, clientePorta);
 
         int operacao = 0; //Recebe um número que o usuário digitar para escolher a opção do menu
@@ -201,8 +200,7 @@ int main()
             {
             case 1: //Login
                 imprimirDecoracao();
-                printf("\t\t>> AUTENTICAÇÃO <<");
-                imprimirDecoracao();
+                printf("\t\t>> AUTENTICAÇÃO <<\n");
                 if (autenticar())
                 {
                     encerrarConexao = areaLogada();
@@ -211,13 +209,12 @@ int main()
                 break;
             case 2: //Cadastro
                 imprimirDecoracao();
-                printf("\n\t\t>> CADASTRO <<\n\n");
-                imprimirDecoracao();
+                printf("\t\t>> CADASTRO <<\n");
                 cadastrarUsuario();
                 break;
             case 3: //Ver política
                 imprimirDecoracao();
-                printf("\n\t\t>> POLÍTICA DE IDENTIFICADORES E SENHAS <<\n\n");
+                printf("\t>> POLÍTICA DE IDENTIFICADORES E SENHAS <<\n");
                 imprimirDecoracao();
                 mostrarPoliticaSenhas();
                 break;
@@ -229,6 +226,7 @@ int main()
             if (encerrarConexao)
                 break;
         } while (1);
+        /* ***Código caso deseje parar o servidor a cada conexão encerrada***
         imprimirDecoracao();
         puts("<?> Deseja finalizar o servidor [s/n]?");
         if (getchar() == 's')
@@ -238,7 +236,7 @@ int main()
             finalizarPrograma();
         }
         getchar();
-        setbuf(stdin, NULL);
+        setbuf(stdin, NULL);*/
     } while (1);
     return EXIT_SUCCESS;
 }
@@ -287,15 +285,16 @@ char *receberDadosCliente(char *idSincronia, char *dadoEsperado)
 void enviarDadosCliente(char *idSincronia, char *dadosServidor)
 {
     char *msgServidor = malloc(MAX_MSG);                       //Armazena a mensagem a ser enviada contendo id e dados
-    sprintf(msgServidor, "%s/%s", idSincronia, dadosServidor); //Insere o id de sincronização e dados em formato específico na mensagem
 
     //Verificar o tamanho da string a ser enviada
-    if (strlen(msgServidor) > MAX_MSG)
+    if (strlen(msgServidor) > (MAX_MSG-strlen(idSincronia)-1))
     {
         printf("# ERRO FATAL - Os dados que o servidor tentou enviar excederam o limite de caracteres, envio cancelado.\n");
         finalizarConexao();
-        return;
+        finalizarPrograma();
     }
+
+    sprintf(msgServidor, "%s/%s", idSincronia, dadosServidor); //Insere o id de sincronização e dados em formato específico na mensagem
 
     //Escreve no socket de comunicação e valida se não houve erro
     if (write(conexao, msgServidor, strlen(msgServidor)) < 0)
@@ -303,7 +302,7 @@ void enviarDadosCliente(char *idSincronia, char *dadosServidor)
         printf("# ERRO - Falha ao enviar mensagem:\n\"%s\"\n", msgServidor);
         return;
     }
-    // printf("\n§ Mensagem enviada para o cliente:\n\"%s\"\n", msgServidor);
+    printf("\n> Mensagem enviada para o cliente:\n\"%s\"\n\n", msgServidor);
     free(msgServidor); //Libera a memória alocada
 }
 
@@ -324,13 +323,13 @@ void finalizarConexao()
         perror("# ERRO - Não foi possível fechar a comunicação");
         return;
     }
-    puts("> INFO - Conexão com cliente encerrada");
+    puts("\n<< << CLIENTE DESCONECTADO << <<");
 }
 
 /**
  * Busca no arquivo o último ID cadastrado e retorna o próximo ID a ser usado
  * @param arquivo é o char com nome do arquivo que deseja utilizar para verificar o próximo ID
- * @return valor do próximo ID a ser usado e 0 em caso de falha ao abrir o arquivo para leitura, 
+ * @return valor do próximo ID a ser usado; 0 em caso de falha ao abrir o arquivo para leitura, 
  * retorna 1 se não conseguir ler qualquer ID anterior no arquivo
  */
 int pegarProximoId(char *arquivo, char *idSincronia)
@@ -508,7 +507,7 @@ short int autenticar()
                 strcpy(u.salt, saltArquivo);
                 strcpy(u.senhaCriptografada, criptografiaArquivo);
                 //Salvar o formato da linha do usuário autenticado
-                sprintf(u.linhaUsuario, ">%d|%s|%s|%s|%s|%s|%s\n", u.codigo, u.identificador, u.salt, u.senhaCriptografada, u.nome, u.sobrenome, u.email);
+                sprintf(u.linhaUsuario, ">%d|%s|%s|%s|%s|%s|%s", u.codigo, u.identificador, u.salt, u.senhaCriptografada, u.nome, u.sobrenome, u.email);
                 fecharArquivo(ponteiroArquivos, "au"); //Fecha o arquivo
                 enviarDadosCliente("au", u.linhaUsuario);
                 return 1;
@@ -533,14 +532,14 @@ short int areaLogada()
 {
     int operacao = 0; //Recebe o valor da entrada do usuário para escolher a operação
     imprimirDecoracao();
-    printf("\tUSUÁRIO '%s' ESTÁ LOGADO", u.nome);
+    printf(">> USUÁRIO '%s' ENTROU... >>", u.nome);
 
     //Loop do menu de operações do usuário logado
     do
     {
         imprimirDecoracao();
         puts("\t> MENU DE OPERAÇÕES: AUTENTICADO <");
-        operacao = atoi(receberDadosCliente("ap", "operação do menu autenticado"));
+        operacao = atoi(receberDadosCliente("ap", "operação do menu"));
 
         if (operacao == 0)
         {
@@ -553,17 +552,13 @@ short int areaLogada()
         {
         case 1: //Logout
             imprimirDecoracao();
-            printf("\t\t>> LOGOUT <<\n");
-            limparEstruturaUsuario();
             return 0;
         case 2: //Excluir Cadastro
             imprimirDecoracao();
             printf("\n\t\t>> EXCLUIR CADASTRO <<\n");
-            imprimirDecoracao();
             if (atoi(receberDadosCliente("cd", "confirmação do usuário para deletar cadastro")))
                 if (excluirUsuario())
                 {
-                    limparEstruturaUsuario();
                     return 0;
                 }
             puts("# OPERAÇÃO CANCELADA");
@@ -571,13 +566,11 @@ short int areaLogada()
         case 3: //Ver dados do usuário
             imprimirDecoracao();
             printf("\n\t\t>> VER DADOS DO USUÁRIO <<\n");
-            imprimirDecoracao();
             verDadosUsuario();
             break;
         case 4: //Cadastro
             imprimirDecoracao();
             printf("\n\t>> VER POLÍTICA DE IDENTIFICADORES E SENHAS <<\n");
-            imprimirDecoracao();
             mostrarPoliticaSenhas();
             break;
         default:
@@ -640,12 +633,12 @@ short int excluirUsuario()
     if (flag)
     {
         limparEstruturaUsuario();
-        enviarDadosCliente("dl", "> SUCESSO - Seu cadastro foi excluído.\n");
+        enviarDadosCliente("dl", "> SUCESSO - Seu cadastro foi excluído.");
         return 1;
     }
     else
     {
-        enviarDadosCliente("dl", "# FALHA - A exclusão do cadastro falhou.\n");
+        enviarDadosCliente("dl", "# FALHA - A exclusão do cadastro falhou.");
         return 0;
     }
 }
@@ -657,7 +650,7 @@ short int excluirUsuario()
 void verDadosUsuario()
 {
     char *dadosUsuario = malloc(MAX_MSG);
-    sprintf(dadosUsuario, "\n¬ Código: %d\n¬ Nome Completo: %s %s\n¬ E-mail: %s\n¬ Login: %s\n¬ Salt: %s\n¬ Senha Criptografada: %s\n", u.codigo, u.nome, u.sobrenome, u.email, u.identificador, u.salt, u.senhaCriptografada);
+    sprintf(dadosUsuario, "¬ Código: %d\n¬ Nome Completo: %s %s\n¬ E-mail: %s\n¬ Login: %s\n¬ Salt: %s\n¬ Senha Criptografada: %s", u.codigo, u.nome, u.sobrenome, u.email, u.identificador, u.salt, u.senhaCriptografada);
     enviarDadosCliente("du", dadosUsuario);
 }
 
@@ -716,7 +709,7 @@ short int validarStringPadrao(char *string, char *idSincronia)
         //Usando a função isalpha da biblioteca ctype.h, é possível verificar se o caractere é alfabético
         if (!isalpha(string[i]))
         {
-            enviarDadosCliente(idSincronia, "# FALHA [CARACTERE INVÁLIDO]: insira somente caracteres alfabéticos nesse campo, sem espaços ou pontuações.\n> Tente novamente: ");
+            enviarDadosCliente(idSincronia, "# FALHA [CARACTERE INVÁLIDO]: insira somente caracteres alfabéticos nesse campo, sem espaços ou pontuações\n> Tente novamente: ");
             return 0;
         }
     }
@@ -1019,6 +1012,7 @@ void finalizarPrograma()
 {
     imprimirDecoracao();
     setbuf(stdin, NULL);
+    setbuf(stdout, NULL);
     printf("# SISTEMA FINALIZADO.\n");
     exit(0);
 }
@@ -1028,14 +1022,15 @@ void finalizarPrograma()
  */
 void limparEstruturaUsuario()
 {
+    printf("<< USUÁRIO '%s' SAIU... <<", u.nome);
     memset(&u.nome[0], 0, sizeof(u.nome));
     memset(&u.sobrenome[0], 0, sizeof(u.sobrenome));
     memset(&u.email[0], 0, sizeof(u.email));
     memset(&u.identificador[0], 0, sizeof(u.identificador));
     memset(&u.salt[0], 0, sizeof(u.salt));
     memset(&u.senha[0], 0, sizeof(u.senha));
-    memset(&u.senhaCriptografada[0], 0, sizeof(u.senhaCriptografada));
     memset(&u.linhaUsuario[0], 0, sizeof(u.linhaUsuario));
+    u.senhaCriptografada = NULL;
     u.codigo = '0';
 }
 
@@ -1046,7 +1041,7 @@ void fecharArquivo(FILE *arquivo, char *idSincronia)
 {
     if (fclose(arquivo))
     {
-        system("cls || clear");
+        system("clear");
         printf("# ERRO - Ocorreu um erro ao fechar um arquivo necessário, o programa foi abortado.");
         enviarDadosCliente(idSincronia, "# ERRO - Ocorreu um erro ao fechar um arquivo necessário, o programa foi abortado.");
         finalizarConexao();

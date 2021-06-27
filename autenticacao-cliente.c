@@ -101,7 +101,7 @@ int main()
         perror("# ERRO - Criação do socket falhou:");
         finalizarPrograma();
     }
-    printf("> Socket do cliente criado com descritor: %d\n", socketDescritor);
+    // printf("§ Socket do cliente criado com descritor: %d\n", socketDescritor);
 
     //Atribuindo informações das configurações do servidor, na sua estrutura
     servidor.sin_addr.s_addr = inet_addr(ENDERECO_SERVIDOR); //Endereço IP
@@ -117,7 +117,7 @@ int main()
     /******* FIM-CONFIGURAÇÃO DO SOCKET E CONEXÃO *******/
 
     imprimirDecoracao();
-    printf("\n\t\t>> CONECTADO AO SERVIDOR <<\n");
+    printf("\n\t\t>> CONECTADO AO SERVIDOR COM SUCESSO <<\n");
     int operacao = 0; //Recebe um número que o usuário digitar para escolher a opção do menu
     char operacaoString[3];
 
@@ -127,7 +127,7 @@ int main()
         pausarPrograma();
         operacao = '\0'; //Limpar a variável para evitar lixo de memória nas repetições
 
-        system("cls || clear");
+        system("clear");
         imprimirDecoracao();
         printf("\n\t\t>> MENU DE OPERAÇÕES <<\n");
         printf("\n> Informe um número para escolher uma opção e pressione ENTER:");
@@ -149,7 +149,7 @@ int main()
         sprintf(operacaoString, "%d", operacao);
         enviarDadosServidor("op", operacaoString);
 
-        system("cls || clear");
+        // system("clear");
 
         if (operacao == 0)
         {
@@ -183,6 +183,7 @@ int main()
             puts(receberDadosServidor("pt"));
             break;
         default:
+            imprimirDecoracao();
             printf("\n# FALHA [OPÇÃO INVÁLIDA] - Você digitou uma opção inválida, tente novamente!\n");
             break;
         }
@@ -198,17 +199,17 @@ int main()
  */
 void enviarDadosServidor(char *idSincronia, char *dadosCliente)
 {
-    char *msgCliente = malloc(MAX_MSG);                      //Armazena a mensagem a ser enviada contendo id e dados
-    sprintf(msgCliente, "%s/%s", idSincronia, dadosCliente); //Insere o id de sincronização e dados em formato específico na mensagem
+    char *msgCliente = malloc(MAX_MSG); //Armazena a mensagem a ser enviada contendo id e dados
 
     //Verificar o tamanho da string a ser enviada
-    if (strlen(msgCliente) > MAX_MSG)
+    while (strlen(dadosCliente) > (MAX_MSG-strlen(idSincronia)-1))
     {
-        printf("# ERRO FATAL - Os dados que pretende enviar ao servidor excederam o limite de caracteres, envio cancelado.\n");
-        //### - Ao invéz de finalizar o programa, solicitar que o usuário informe novamente o dado e validar o tamanho.
-        finalizarConexao();
-        finalizarPrograma();
+        printf("\n# ERRO - Os dados que pretende enviar ao servidor (%d caracteres), excederam o limite de %d caracteres, envio cancelado.\n# INFO - Digite novamente o dado que deseja enviar: ", strlen(dadosCliente), MAX_MSG-strlen(idSincronia)-1);
+        setbuf(stdin, NULL);
+        scanf("%[^\n]", dadosCliente);
     }
+
+    sprintf(msgCliente, "%s/%s", idSincronia, dadosCliente); //Insere o id de sincronização e dados em formato específico na mensagem
 
     //Escreve no socket e valida se não houveram erros
     if (write(socketDescritor, msgCliente, strlen(msgCliente)) < 0)
@@ -441,7 +442,7 @@ void areaLogada()
         pausarPrograma();
         operacao = '\0'; //Limpar a variável para evitar lixo de memória nas repetições
 
-        system("cls || clear");
+        system("clear");
         imprimirDecoracao();
         printf("\t\t> MENU DE OPERAÇÕES <\n\n*Autenticado como %s", u.nome);
         imprimirDecoracao();
@@ -467,7 +468,7 @@ void areaLogada()
         sprintf(operacaoString, "%d", operacao);
         enviarDadosServidor("ap", operacaoString);
 
-        system("cls || clear");
+        system("clear");
 
         if (operacao == 0)
         {
@@ -507,8 +508,8 @@ void areaLogada()
         case 3: //Ver dados do usuário
             imprimirDecoracao();
             printf("\n\t\t>> MEUS DADOS <<\n");
-            puts(receberDadosServidor("du"));
             imprimirDecoracao();
+            puts(receberDadosServidor("du"));
             break;
         case 4: //Cadastro
             imprimirDecoracao();
@@ -547,7 +548,7 @@ void pausarPrograma()
 }
 
 /**
- * ### Zera os dados da estrutura do usuário para reutilização
+ * Zera os dados da estrutura do usuário para reutilização
  */
 void limparEstruturaUsuario()
 {
@@ -557,8 +558,8 @@ void limparEstruturaUsuario()
     memset(&u.identificador[0], 0, sizeof(u.identificador));
     memset(&u.salt[0], 0, sizeof(u.salt));
     memset(&u.senha[0], 0, sizeof(u.senha));
-    // memset(&u.senhaCriptografada[0], 0, sizeof(u.senhaCriptografada));
     memset(&u.linhaUsuario[0], 0, sizeof(u.linhaUsuario));
+    u.senhaCriptografada = NULL;
     u.codigo = '0';
 }
 
