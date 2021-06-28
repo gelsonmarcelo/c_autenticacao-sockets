@@ -124,7 +124,9 @@ int main()
     if (msgServidor < 4)
     {
         printf("# ERRO - Não foi possível identificar o comprimento máximo aceitável de leitura e escrita das mensagens pelo servidor, o tamanho máximo considerado será de %d.\n", maxMsg);
-    }else{
+    }
+    else
+    {
         maxMsg = msgServidor;
     }
 
@@ -235,29 +237,33 @@ void enviarDadosServidor(char *idSincronia, char *dadosCliente)
  */
 char *receberDadosServidor(char *idSincronia)
 {
-    int tamanho; //Guarda o tamanho da mensagem recebida pelo servidor
-    char *msgServidorLocal = malloc(maxMsg);
+    int comprimentoMsg; //Guarda o comprimento da mensagem recebida pelo servidor
+    char *msgServidor = malloc(maxMsg);
 
     //Lê resposta do servidor e valida se não houveram erros
-    if ((tamanho = read(socketDescritor, msgServidorLocal, maxMsg)) < 0)
+    if ((comprimentoMsg = read(socketDescritor, msgServidor, maxMsg)) < 0)
     {
         perror("# ERRO - Falha ao receber resposta");
         finalizarConexao();
         finalizarPrograma();
     }
-    msgServidorLocal[tamanho] = '\0'; //Adiciona NULL no final da string
+    msgServidor[comprimentoMsg] = '\0'; //Adiciona NULL no final da string
 
-    printf("\n§ msgCliente Recebida: %s\n", msgServidorLocal);
+    // printf("\n§ msgCliente Recebida: %s\n", msgServidor);
 
     //Separa o identificador de sincronização e compara se era esse identificador que o programa estava esperando
-    if (strcmp(strsep(&msgServidorLocal, "/"), idSincronia))
+    if (strcmp(strsep(&msgServidor, "/"), idSincronia))
     {
         //Se não for, houve algum problema na sincronização cliente/servidor e eles não estão comunicando corretamente
         puts("\n# ERRO FATAL - Servidor e cliente não estão sincronizados...");
         finalizarConexao();
         finalizarPrograma();
     }
-    return msgServidorLocal; //Retorna somente a parte da mensagem recebida, após o /
+    //Sempre que o primeiro caractere da mensagem for uma #, a mensagem precisa ser exibida para o usuário, pois indica um erro
+    if (msgServidor[0] == '#')
+        puts(msgServidor);
+
+    return msgServidor; //Retorna somente a parte da mensagem recebida, após o /
 }
 
 /**
@@ -281,19 +287,22 @@ void finalizarConexao()
  */
 void cadastrarUsuario()
 {
-    printf("\n> Forneça as informações necessárias para efetuar o cadastro:\n");
-
     char entradaTemp[MAX];                           //Variável para fazer a entrada de valores digitados e realizar a validação antes de atribuir à variável correta
     char msgServidor[maxMsg];                        //Mensagem que será recebida, vinda do servidor
     memset(&entradaTemp[0], 0, sizeof(entradaTemp)); //Limpando a variável para garantir que não entre lixo de memória
 
+    if (receberDadosServidor("tf")[0] == '#')
+        return;
+    if (receberDadosServidor("pi")[0] == '#')
+        return;
+
+    printf("\n> Forneça as informações necessárias para efetuar o cadastro:\n");
     //Solicita o nome do usuário
     memset(&msgServidor[0], 0, sizeof(msgServidor));
     printf("\n> Informe seu primeiro nome: ");
     //Loop para validação do nome, enquanto a função que valida a string retornar 0 (falso) o loop vai continuar (há uma negação na frente do retorno da função)
     do
     {
-        puts(msgServidor);
         setbuf(stdin, NULL);          //Limpa a entrada par evitar lixo
         scanf("%[^\n]", entradaTemp); //Leitura do teclado, o %[^\n] vai fazer com que o programa leia tudo que o usuário digitar exceto ENTER (\n), por padrão pararia de ler no caractere espaço
         enviarDadosServidor("rp", entradaTemp);
@@ -309,7 +318,6 @@ void cadastrarUsuario()
     printf("\n> Informe seu último sobrenome: ");
     do
     {
-        puts(msgServidor);
         setbuf(stdin, NULL);
         scanf("%[^\n]", entradaTemp);
         enviarDadosServidor("ru", entradaTemp);
@@ -323,7 +331,6 @@ void cadastrarUsuario()
     printf("\n> Informe seu e-mail: ");
     do
     {
-        puts(msgServidor);
         setbuf(stdin, NULL);
         scanf("%[^\n]", entradaTemp);
         enviarDadosServidor("re", entradaTemp);
@@ -336,7 +343,6 @@ void cadastrarUsuario()
     printf("\n> Crie seu login: ");
     do
     {
-        puts(msgServidor);
         setbuf(stdin, NULL);
         scanf("%[^\n]", entradaTemp);
         enviarDadosServidor("ri", entradaTemp);
@@ -349,10 +355,9 @@ void cadastrarUsuario()
     memset(&msgServidor[0], 0, sizeof(msgServidor));
     do
     {
-        puts(msgServidor);
         setbuf(stdin, NULL);
         //getpass() é usado para desativar o ECHO do console e não exibir a senha sendo digitada pelo usuário, retorna um ponteiro apontando para um buffer contendo a senha, terminada em '\0' (NULL)
-        strcpy(entradaTemp, getpass("> Crie uma senha: "));
+        strcpy(entradaTemp, getpass("\n> Crie uma senha: "));
         enviarDadosServidor("rs", entradaTemp);
         strcpy(msgServidor, receberDadosServidor("rs"));
         //Confirmação de senha
@@ -394,7 +399,6 @@ short int autenticar()
         strcpy(msgServidor, receberDadosServidor("au"));
         if (msgServidor[0] == '#')
         {
-            puts(msgServidor);
             puts("\n<?> Tentar novamente? [1]Sim / [0]Não:");
             while (scanf("%d", &repetir) != 1)
             {
@@ -441,6 +445,7 @@ void areaLogada()
 {
     int operacao = 0; //Recebe o valor da entrada do usuário para escolher a operação
     char operacaoString[3];
+    char msgServidor[maxMsg];
     imprimirDecoracao();
     printf("\n\t\tBEM-VINDO %s!\n", u.nome);
 
@@ -510,9 +515,14 @@ void areaLogada()
             setbuf(stdin, NULL);
             getchar();
             enviarDadosServidor("cd", "1");
-            puts(receberDadosServidor("dl"));
-            limparEstruturaUsuario();
-            return;
+            strcpy(msgServidor, receberDadosServidor("dl"));
+            if (msgServidor[0] == '>')
+            {
+                puts(msgServidor);
+                limparEstruturaUsuario();
+                return;
+            }
+            break;
         case 3: //Ver dados do usuário
             imprimirDecoracao();
             printf("\n\t\t>> MEUS DADOS <<\n");
