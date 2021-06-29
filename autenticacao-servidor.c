@@ -143,7 +143,6 @@ int main()
         perror("# ERRO FATAL - Erro ao fazer bind");
         finalizar(0, 1);
     }
-
     puts("> SERVIDOR INICIADO...");
     pausarPrograma();
     system("clear");
@@ -212,6 +211,9 @@ int main()
                 printf("\t>> POLÍTICA DE IDENTIFICADORES E SENHAS <<\n");
                 mostrarPoliticaSenhas();
                 break;
+            // ### case 4:
+            //     goto DESCONECTAR;
+            //     DESCONECTAR:
             default:
                 puts("\n# INFO - Usuário enviou um comando inválido");
                 break;
@@ -264,7 +266,8 @@ char *receberDadosCliente(char *idSincronia, char *dadoEsperado)
     {
         //Se não for, houve algum problema na sincronização cliente/servidor e eles não estão comunicando corretamente
         puts("\n# ERRO FATAL - Servidor e cliente não estão sincronizados...");
-        finalizar(1, 1);
+        // finalizar(1, 1);
+        return "^[";
     }
     return msgCliente; //Retorna somente a parte da mensagem recebida, após o /
 }

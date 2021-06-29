@@ -55,11 +55,10 @@ void cadastrarUsuario();
 void limparEstruturaUsuario();
 void imprimirDecoracao();
 void pausarPrograma();
-void finalizarPrograma();
 void fecharArquivo();
 void enviarDadosServidor(char *idSincronia, char *dadosCliente);
 char *receberDadosServidor();
-void finalizarConexao();
+void finalizar(short int comunicacao, short int programa);
 void areaLogada();
 
 /**
@@ -97,7 +96,7 @@ int main()
     if ((socketDescritor = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
         perror("# ERRO FATAL - Criação do socket falhou:");
-        finalizarPrograma();
+        finalizar(0, 1);
     }
     // printf("§ Socket do cliente criado com descritor: %d\n", socketDescritor);
 
@@ -110,7 +109,7 @@ int main()
     if (connect(socketDescritor, (struct sockaddr *)&servidor, sizeof(servidor)) == -1)
     {
         perror("# ERRO FATAL - Não foi possível conectar no servidor");
-        finalizarPrograma();
+        finalizar(0, 1);
     }
     /******* FIM-CONFIGURAÇÃO DO SOCKET E CONEXÃO *******/
 
@@ -162,8 +161,7 @@ int main()
 
         if (operacao == 0)
         {
-            finalizarConexao();
-            finalizarPrograma();
+            finalizar(1, 1);
         }
 
         //Escolhe a operação conforme o valor que o usuário digitou
@@ -244,8 +242,7 @@ char *receberDadosServidor(char *idSincronia)
     if ((comprimentoMsg = read(socketDescritor, msgServidor, maxMsg)) < 0)
     {
         perror("# ERRO - Falha ao receber resposta");
-        finalizarConexao();
-        finalizarPrograma();
+        finalizar(1, 1);
     }
     msgServidor[comprimentoMsg] = '\0'; //Adiciona NULL no final da string
 
@@ -256,30 +253,13 @@ char *receberDadosServidor(char *idSincronia)
     {
         //Se não for, houve algum problema na sincronização cliente/servidor e eles não estão comunicando corretamente
         puts("\n# ERRO FATAL - Servidor e cliente não estão sincronizados...");
-        finalizarConexao();
-        finalizarPrograma();
+        finalizar(1, 1);
     }
     //Sempre que o primeiro caractere da mensagem for uma #, a mensagem precisa ser exibida para o usuário, pois indica um erro
     if (msgServidor[0] == '#')
         puts(msgServidor);
 
     return msgServidor; //Retorna somente a parte da mensagem recebida, após o /
-}
-
-/**
- * Encerra a comunicação fechando o socket
- */
-void finalizarConexao()
-{
-    imprimirDecoracao();
-
-    //Fecha o socket
-    if (close(socketDescritor))
-    {
-        perror("# ERRO - Não foi possível fechar a comunicação");
-        return;
-    }
-    puts("> INFO - Você foi desconectado.");
 }
 
 /**
@@ -430,8 +410,7 @@ short int autenticar()
         else
         {
             puts("# ERRO FATAL - O servidor enviou uma mensagem desconhecida.\n");
-            finalizarConexao();
-            finalizarPrograma();
+            finalizar(1, 1);
         }
     } while (1);
 
@@ -486,8 +465,7 @@ void areaLogada()
         if (operacao == 0)
         {
             limparEstruturaUsuario();
-            finalizarConexao();
-            finalizarPrograma();
+            finalizar(1, 1);
         }
 
         //Escolhe a operação conforme o valor que o usuário digitou
@@ -582,13 +560,31 @@ void limparEstruturaUsuario()
 }
 
 /**
- * Limpa a estrutura com os dados do usuário e encerra o programa
+ * Encerra o programa e/ou a comunicação com o servidor conectado, dependendo da flag ativada
+ * @param conexao defina 1 se a conexao com o servidor conectado deve ser encerrada
+ * @param programa defina 1 se o programa deve ser finalizado
  */
-void finalizarPrograma()
+void finalizar(short int comunicacao, short int programa)
 {
-    imprimirDecoracao();
-    setbuf(stdin, NULL);
-    setbuf(stdout, NULL);
-    printf("# SISTEMA FINALIZADO.\n");
-    exit(0);
+    if (comunicacao)
+    {
+        imprimirDecoracao();
+
+        //Fecha o socket
+        if (close(socketDescritor))
+        {
+            perror("# ERRO - Não foi possível fechar a comunicação");
+            return;
+        }
+        puts("> INFO - Você foi desconectado.");
+    }
+
+    if (programa)
+    {
+        imprimirDecoracao();
+        setbuf(stdin, NULL);
+        setbuf(stdout, NULL);
+        printf("# SISTEMA FINALIZADO.\n");
+        exit(0);
+    }
 }
