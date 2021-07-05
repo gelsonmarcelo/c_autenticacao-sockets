@@ -276,11 +276,8 @@ void cadastrarUsuario()
 {
     char entradaTemp[MAX]; //Variável para fazer a entrada de valores digitados
 
-    //Teste do arquivo de dados
-    if (receberDadosServidor("tf", 0)[0] == '#')
-        return;
-    //Testa se o servidor obteve sucesso em pegar o próximo ID do arquivo
-    if (receberDadosServidor("pi", 0)[0] == '#')
+    //Servidor vai enviar se detectou algum erro com o arquivo de dados e se obteve sucesso em pegar o próximo ID do arquivo
+    if (receberDadosServidor("fi", 0)[0] == '#')
         return;
 
     printf("\n> Forneça as informações necessárias para efetuar o cadastro:\n");

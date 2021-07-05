@@ -368,15 +368,11 @@ int pegarProximoId(char *arquivo, char *idSincronia)
  */
 void cadastrarUsuario()
 {
-    //Validação para, caso o arquivo não possa ser aberto, interromper antes de pedir todos os dados ao usuário
-    if (testarArquivo(arquivoUsuarios, "tf"))
+    /*Validação para, caso o arquivo não possa ser aberto, interromper antes de pedir todos os dados ao usuário
+    e Define o ID do usuário que está se cadastrando, se o ID retornar 0 houve algum problema na função e interrompe o cadastro*/
+    if (testarArquivo(arquivoUsuarios, "fi") || !(u.codigo = pegarProximoId(arquivoUsuarios, "fi")))
         return;
-    enviarDadosCliente("tf", "> SUCESSO: Teste do arquivo de dados aprovado");
-
-    //Define o ID do usuário que está se cadastrando, se o ID retornar 0 houve algum problema na função e interrompe o cadastro
-    if (!(u.codigo = pegarProximoId(arquivoUsuarios, "pi")))
-        return;
-    enviarDadosCliente("pi", "> SUCESSO: ID do novo usuário obtido com sucesso");
+    enviarDadosCliente("fi", "> SUCESSO: Teste do arquivo de dados aprovado e ID do novo usuário obtido com sucesso");
 
     printf("\n> Usuário deve fornecer as informações necessárias para efetuar o cadastro:\n");
     coletarDados();
@@ -569,6 +565,7 @@ short int areaLogada()
         {
         case 1: //Logout
             imprimirDecoracao();
+            limparEstruturaUsuario();
             return 0;
         case 2: //Excluir Cadastro
             imprimirDecoracao();
