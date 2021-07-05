@@ -157,6 +157,7 @@ int main()
     //Loop do recebimento e tratativa das conexões
     do
     {
+        NOVA_CONEXAO:
         imprimirDecoracao();
         puts("> SERVIDOR ONLINE...");
         printf("> Ouvindo na porta %d.", PORTA);
@@ -200,7 +201,7 @@ int main()
                 if (autenticar())
                 {
                     if (areaLogada())
-                        goto DESCONECTAR;
+                        goto NOVA_CONEXAO;
                 }
                 break;
             case 2: //Cadastro
@@ -216,7 +217,6 @@ int main()
                 break;
             }
         } while (1);
-    DESCONECTAR:
         /* ***Código caso deseje parar o servidor a cada conexão encerrada***
         imprimirDecoracao();
         puts("<?> Deseja finalizar o servidor [s/n]?");

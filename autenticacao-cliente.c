@@ -369,7 +369,11 @@ short int autenticar()
         imprimirDecoracao();
 
         strcpy(msgServidor, receberDadosServidor("au", 0)); //Servidor responde se autenticou
-        if (msgServidor[0] == '#')                          //Se o primeiro caractere for '#', não autenticou
+        if (!strcmp(msgServidor, "# FALHA - Houve um problema ao ler a linha no arquivo de dados."))
+        {
+            return 0;
+        }
+        else if (msgServidor[0] == '#') //Se o primeiro caractere for '#', não autenticou
         {
             puts("\n<?> Tentar novamente? [1]Sim / [0]Não:");
             //Recebe confirmação para repetir a autenticação
